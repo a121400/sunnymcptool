@@ -449,6 +449,206 @@ SunnyNet MCP Server 提供以下完整功能工具：
 - 监控实时数据流
 - 分析双向通信协议
 
+---
+
+#### 11. `sunnynet_set_replace_rules` - 设置替换规则
+
+配置请求/响应内容的自动替换规则，实现数据拦截和修改。
+
+**参数：**
+- `rules` (必需): 替换规则数组
+  - `type` (必需): 替换类型（String(UTF8)/String(GBK)/Base64/HEX/响应文件）
+  - `source` (必需): 源内容（要被替换的内容）
+  - `target` (必需): 目标内容（替换后的内容）
+  - `hash` (可选): 规则唯一标识
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "替换规则已设置",
+  "total_rules": 5,
+  "failed_rules": []
+}
+```
+
+**替换类型说明：**
+- **String(UTF8)**: UTF-8 编码的字符串替换
+- **String(GBK)**: GBK 编码的字符串替换
+- **Base64**: Base64 编码的数据替换
+- **HEX**: 十六进制数据替换
+- **响应文件**: 用指定文件内容替换响应
+
+**示例配置：**
+```json
+{
+  "rules": [
+    {
+      "type": "String(UTF8)",
+      "source": "old_api_key",
+      "target": "new_api_key",
+      "hash": "rule_001"
+    },
+    {
+      "type": "Base64",
+      "source": "b2xkX2RhdGE=",
+      "target": "bmV3X2RhdGE=",
+      "hash": "rule_002"
+    },
+    {
+      "type": "响应文件",
+      "source": "https://api.example.com/data",
+      "target": "C:\\mock\\response.json",
+      "hash": "rule_003"
+    }
+  ]
+}
+```
+
+**使用场景：**
+- API 接口测试和模拟
+- 修改加密参数
+- 替换服务器响应内容
+- 本地化调试
+- 数据脱敏和替换
+
+---
+
+#### 12. `sunnynet_set_hosts_rules` - 设置 HOSTS 规则
+
+配置域名重定向规则，实现自定义 DNS 解析和域名映射。
+
+**参数：**
+- `rules` (必需): HOSTS 规则数组
+  - `source` (必需): 源域名（支持通配符 *）
+  - `target` (必需): 目标地址
+  - `hash` (可选): 规则唯一标识
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "HOSTS 规则已设置",
+  "total_rules": 3,
+  "failed_rules": []
+}
+```
+
+**通配符支持：**
+- `*` : 匹配任意字符
+- `*.example.com` : 匹配所有子域名
+- `api.*.com` : 匹配中间部分
+
+**示例配置：**
+```json
+{
+  "rules": [
+    {
+      "source": "api.example.com",
+      "target": "127.0.0.1:8080",
+      "hash": "hosts_001"
+    },
+    {
+      "source": "*.test.com",
+      "target": "192.168.1.100",
+      "hash": "hosts_002"
+    },
+    {
+      "source": "old-domain.com",
+      "target": "new-domain.com",
+      "hash": "hosts_003"
+    }
+  ]
+}
+```
+
+**使用场景：**
+- 本地开发环境调试
+- 测试环境域名映射
+- 服务器迁移测试
+- API 网关切换
+- 域名替换和重定向
+
+---
+
+#### 13. `sunnynet_get_replace_rules` - 获取当前替换规则
+
+获取当前生效的替换规则列表。
+
+**参数：** 无
+
+**返回：**
+```json
+{
+  "success": true,
+  "rules": [
+    {
+      "type": "String(UTF8)",
+      "source": "old_api_key",
+      "target": "new_api_key",
+      "hash": "rule_001"
+    }
+  ],
+  "total": 1
+}
+```
+
+**使用场景：**
+- 查看当前配置
+- 规则审计
+- 导出配置
+
+---
+
+#### 14. `sunnynet_get_hosts_rules` - 获取当前 HOSTS 规则
+
+获取当前生效的 HOSTS 规则列表。
+
+**参数：** 无
+
+**返回：**
+```json
+{
+  "success": true,
+  "rules": [
+    {
+      "source": "api.example.com",
+      "target": "127.0.0.1:8080",
+      "hash": "hosts_001"
+    }
+  ],
+  "total": 1
+}
+```
+
+**使用场景：**
+- 查看当前配置
+- 域名映射管理
+- 规则导出备份
+
+---
+
+#### 15. `sunnynet_clear_rules` - 清除规则
+
+清除指定类型的规则或全部规则。
+
+**参数：**
+- `type` (必需): 规则类型（replace/hosts/all）
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "规则已清除",
+  "cleared_count": 5
+}
+```
+
+**使用场景：**
+- 重置配置
+- 清理测试规则
+- 切换场景配置
+
 ## 项目结构
 
 ```
