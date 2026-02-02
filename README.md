@@ -656,13 +656,87 @@ sunnymcptool/
 ├── build/
 │   └── bin/
 │       └── SunnyNet.exe    # 预编译的 MCP Server（推荐使用）
+├── frontend/               # Vue 3 前端界面
+│   ├── src/
+│   │   ├── components/    # Vue 组件
+│   │   └── main.js        # 入口文件
+│   └── package.json
+├── SunnyNet/               # SunnyNet 核心库（子模块）
 ├── mcp_server.go           # MCP Server 主程序
 ├── mcp_tools.go            # MCP 工具实现
 ├── mcp_stdio.go            # MCP 标准输入输出处理
 ├── mcp_standalone/         # 独立 MCP Server 版本
-├── SunnyNet/               # SunnyNet 核心库
+├── go.mod                  # Go 模块配置
+├── wails.json              # Wails 配置
 └── README.md               # 本文档
 ```
+
+## 开源技术栈
+
+本项目基于以下优秀的开源项目构建：
+
+### 核心框架
+
+#### 网络中间件
+- **[SunnyNet](https://github.com/qtgolang/SunnyNet)** `v1.0.0`
+  - 作者：qtgolang
+  - 功能：网络抓包和分析的核心引擎
+  - 许可证：开源项目
+  - 说明：提供 HTTP/HTTPS/WebSocket/TCP/UDP 全协议支持
+
+#### 桌面应用框架
+- **[Wails](https://github.com/wailsapp/wails)** `v2.11.0`
+  - 作者：Wails 团队
+  - 功能：Go + Web 技术构建桌面应用
+  - 许可证：MIT
+  - 说明：用于构建跨平台桌面 GUI 界面
+
+#### 前端框架
+- **[Vue 3](https://github.com/vuejs/core)** `v3.x`
+  - 作者：Vue 团队
+  - 功能：渐进式 JavaScript 框架
+  - 许可证：MIT
+  - 说明：用于构建现代化的用户界面
+
+### 主要依赖库
+
+#### Go 语言库
+
+- **[gorilla/websocket](https://github.com/gorilla/websocket)** `v1.5.3`
+  - WebSocket 协议实现
+
+- **[traefik/yaegi](https://github.com/traefik/yaegi)** `v0.15.1`
+  - Go 脚本解释器，支持动态脚本执行
+
+- **[andybalholm/brotli](https://github.com/andybalholm/brotli)** `v1.1.1`
+  - Brotli 压缩算法支持
+
+- **[klauspost/compress](https://github.com/klauspost/compress)** `v1.17.11`
+  - 高性能压缩库
+
+- **[Trisia/gosysproxy](https://github.com/Trisia/gosysproxy)** `v1.1.0`
+  - 系统代理设置工具
+
+- **[mitchellh/go-ps](https://github.com/mitchellh/go-ps)** `v1.0.0`
+  - 进程列表获取
+
+- **[atotto/clipboard](https://github.com/atotto/clipboard)** `v0.1.4`
+  - 跨平台剪贴板操作
+
+- **[tidwall/gjson](https://github.com/tidwall/gjson)** `v1.18.0`
+  - 快速 JSON 解析
+
+- **[google/uuid](https://github.com/google/uuid)** `v1.6.0`
+  - UUID 生成
+
+- **[labstack/echo](https://github.com/labstack/echo)** `v4.13.3`
+  - 高性能 Web 框架
+
+### 前端组件库
+
+- **Monaco Editor** - 代码编辑器
+- **Element Plus** - Vue 3 UI 组件库
+- **Vite** - 前端构建工具
 
 ## 技术支持
 
@@ -673,10 +747,27 @@ sunnymcptool/
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
 
-## 致谢
+所有依赖的开源项目遵循各自的开源许可证。
 
-- [SunnyNet](https://github.com/qtgolang/SunnyNet) - 网络中间件核心库
-- [Model Context Protocol](https://modelcontextprotocol.io/) - MCP 协议
+## 特别致谢
+
+### 核心贡献者
+
+感谢以下开源项目及其作者的卓越贡献：
+
+- **[qtgolang/SunnyNet](https://github.com/qtgolang/SunnyNet)** - 提供强大的网络中间件核心功能，本项目的基石
+- **[Wails Team](https://wails.io/)** - 优秀的 Go 桌面应用框架，让跨平台开发变得简单
+- **[Vue.js Team](https://vuejs.org/)** - 强大的前端框架，提供流畅的用户体验
+
+### 技术支持
+
+- **[Model Context Protocol](https://modelcontextprotocol.io/)** - Anthropic 开发的 MCP 协议
+- **[Go Team](https://go.dev/)** - Go 语言及其生态系统
+- **所有开源贡献者** - 感谢所有为开源社区做出贡献的开发者
+
+### 开源精神
+
+本项目秉承开源精神，站在巨人的肩膀上。我们感激所有开源项目的无私奉献，也希望本项目能为社区带来价值。
 
 ---
 
