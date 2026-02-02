@@ -142,17 +142,312 @@ AI 将显示该请求的完整头信息、响应内容等。
 
 AI 将配置进程过滤规则。
 
-## 可用的 MCP Tools
+## MCP 功能详解
 
-SunnyNet MCP Server 提供以下工具：
+### 可用的 MCP Tools
 
-- `start_capture` - 启动网络抓包
-- `stop_capture` - 停止抓包
-- `list_requests` - 列出捕获的请求
-- `get_request_detail` - 获取请求详情
-- `set_process_filter` - 设置进程过滤
-- `install_certificate` - 安装 HTTPS 证书
-- `get_statistics` - 获取抓包统计信息
+SunnyNet MCP Server 提供以下完整功能工具：
+
+#### 1. `sunnynet_start` - 启动网络抓包服务
+
+启动 SunnyNet 网络抓包服务，开始监听和捕获网络流量。
+
+**参数：**
+- `port` (可选): 代理端口，默认 9999
+- `enable_https` (可选): 是否启用 HTTPS 抓包，默认 true
+- `driver` (可选): 网络驱动类型（netfilter/proxifier/tun），默认 netfilter
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "SunnyNet 已启动",
+  "port": 9999,
+  "proxy_url": "http://127.0.0.1:9999"
+}
+```
+
+**使用场景：**
+- 开始新的抓包会话
+- 配置特定端口和驱动
+- 初始化 HTTPS 抓包环境
+
+---
+
+#### 2. `sunnynet_stop` - 停止抓包服务
+
+停止当前运行的 SunnyNet 抓包服务。
+
+**参数：** 无
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "SunnyNet 已停止",
+  "captured_requests": 1234
+}
+```
+
+**使用场景：**
+- 结束抓包会话
+- 释放系统资源
+- 导出数据前停止服务
+
+---
+
+#### 3. `sunnynet_get_requests` - 获取请求列表
+
+获取已捕获的网络请求列表，支持分页和过滤。
+
+**参数：**
+- `limit` (可选): 返回数量，默认 50，最大 1000
+- `offset` (可选): 偏移量，默认 0
+- `protocol` (可选): 协议过滤（http/https/ws/wss/tcp/udp）
+- `status_code` (可选): HTTP 状态码过滤（如 200, 404）
+- `method` (可选): HTTP 方法过滤（GET/POST/PUT/DELETE等）
+- `url_contains` (可选): URL 包含的关键字
+- `process_name` (可选): 进程名称过滤
+
+**返回：**
+```json
+{
+  "success": true,
+  "total": 1234,
+  "requests": [
+    {
+      "id": "req_001",
+      "method": "GET",
+      "url": "https://api.example.com/users",
+      "status": 200,
+      "protocol": "https",
+      "process": "chrome.exe",
+      "timestamp": "2026-02-02T10:30:00Z",
+      "size": 1024
+    }
+  ]
+}
+```
+
+**使用场景：**
+- 查看所有捕获的请求
+- 按条件筛选特定请求
+- 分析请求模式和趋势
+
+---
+
+#### 4. `sunnynet_get_request_detail` - 获取请求详细信息
+
+获取指定请求的完整详细信息，包括请求头、响应头、Body 等。
+
+**参数：**
+- `request_id` (必需): 请求 ID
+
+**返回：**
+```json
+{
+  "success": true,
+  "request": {
+    "id": "req_001",
+    "method": "POST",
+    "url": "https://api.example.com/login",
+    "protocol": "https",
+    "status_code": 200,
+    "request_headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer token..."
+    },
+    "request_body": "{\"username\":\"test\"}",
+    "response_headers": {
+      "Content-Type": "application/json"
+    },
+    "response_body": "{\"status\":\"success\"}",
+    "timing": {
+      "dns": 10,
+      "connect": 50,
+      "ssl": 100,
+      "send": 5,
+      "wait": 200,
+      "receive": 50,
+      "total": 415
+    }
+  }
+}
+```
+
+**使用场景：**
+- 分析特定请求的完整信息
+- 调试 API 调用问题
+- 查看加密数据的解密内容
+
+---
+
+#### 5. `sunnynet_filter_process` - 设置进程过滤
+
+配置只抓取特定进程的网络流量。
+
+**参数：**
+- `process_names` (必需): 进程名称数组，如 ["chrome.exe", "firefox.exe"]
+- `mode` (可选): 过滤模式（whitelist/blacklist），默认 whitelist
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "进程过滤已设置",
+  "filtered_processes": ["chrome.exe", "firefox.exe"]
+}
+```
+
+**使用场景：**
+- 只监控特定应用的流量
+- 排除系统进程干扰
+- 精准定位目标程序
+
+---
+
+#### 6. `sunnynet_install_cert` - 安装 HTTPS 证书
+
+安装或导出 SunnyNet 的 HTTPS 抓包证书。
+
+**参数：**
+- `action` (必需): 操作类型（install/export）
+- `export_path` (可选): 导出路径（当 action=export 时）
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "证书已安装到系统",
+  "cert_path": "C:\\Users\\...\\sunnynet-ca.crt"
+}
+```
+
+**使用场景：**
+- 首次使用 HTTPS 抓包前安装证书
+- 导出证书用于其他设备
+- 重新安装损坏的证书
+
+---
+
+#### 7. `sunnynet_get_statistics` - 获取统计信息
+
+获取当前会话的抓包统计数据。
+
+**参数：** 无
+
+**返回：**
+```json
+{
+  "success": true,
+  "statistics": {
+    "total_requests": 1234,
+    "by_protocol": {
+      "http": 800,
+      "https": 400,
+      "ws": 20,
+      "tcp": 14
+    },
+    "by_status": {
+      "2xx": 1000,
+      "3xx": 100,
+      "4xx": 100,
+      "5xx": 34
+    },
+    "total_size": 102400000,
+    "uptime": 3600,
+    "requests_per_second": 0.34
+  }
+}
+```
+
+**使用场景：**
+- 查看抓包会话总览
+- 分析流量分布
+- 性能监控
+
+---
+
+#### 8. `sunnynet_modify_request` - 修改请求/响应
+
+动态修改请求或响应数据（高级功能）。
+
+**参数：**
+- `request_id` (必需): 请求 ID
+- `modify_type` (必需): 修改类型（request/response）
+- `headers` (可选): 修改的头部
+- `body` (可选): 修改的 Body
+- `status_code` (可选): 修改的状态码（仅响应）
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "请求已修改"
+}
+```
+
+**使用场景：**
+- 测试不同的请求参数
+- 模拟服务器响应
+- 调试客户端行为
+
+---
+
+#### 9. `sunnynet_export_data` - 导出抓包数据
+
+将捕获的数据导出为文件（JSON/HAR 格式）。
+
+**参数：**
+- `format` (必需): 导出格式（json/har）
+- `output_path` (必需): 输出文件路径
+- `filter` (可选): 过滤条件（同 get_requests）
+
+**返回：**
+```json
+{
+  "success": true,
+  "message": "数据已导出",
+  "file_path": "C:\\exports\\capture_20260202.json",
+  "exported_count": 1234
+}
+```
+
+**使用场景：**
+- 保存抓包结果
+- 分享数据给团队
+- 后续离线分析
+
+---
+
+#### 10. `sunnynet_websocket_monitor` - WebSocket 实时监控
+
+监控 WebSocket 连接的实时消息。
+
+**参数：**
+- `connection_id` (必需): WebSocket 连接 ID
+- `direction` (可选): 方向过滤（send/receive/both），默认 both
+
+**返回：**
+```json
+{
+  "success": true,
+  "messages": [
+    {
+      "id": "msg_001",
+      "direction": "send",
+      "timestamp": "2026-02-02T10:30:01Z",
+      "data": "{\"type\":\"ping\"}",
+      "size": 15
+    }
+  ]
+}
+```
+
+**使用场景：**
+- 调试 WebSocket 通信
+- 监控实时数据流
+- 分析双向通信协议
 
 ## 项目结构
 
