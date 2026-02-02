@@ -7,9 +7,9 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![MCP](https://img.shields.io/badge/MCP-Server-orange)
 
-**SunnyNet 网络抓包工具的 MCP Server 实现**
+**基于 SunnyNet 中间件和 SunnyNetTools 抓包工具扩展的 MCP Server**
 
-支持通过 Model Context Protocol (MCP) 在 AI 应用中使用 SunnyNet 网络分析功能
+在 SunnyNet 强大的网络分析能力基础上，通过 Model Context Protocol (MCP) 让 AI 应用能够调用网络抓包功能
 
 [快速开始](#快速开始) • [功能说明](#功能说明) • [配置方法](#配置方法) • [使用示例](#使用示例)
 
