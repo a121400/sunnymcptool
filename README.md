@@ -17,6 +17,27 @@
 
 ---
 
+## 项目说明
+
+### 基于开源项目
+
+本项目基于以下开源项目开发：
+
+- **网络中间件核心**：[SunnyNet](https://github.com/qtgolang/SunnyNet) by [@qtgolang](https://github.com/qtgolang)
+- **GUI 界面程序**：[SunnyNetTools](https://github.com/qtgolang/SunnyNetTools) by [@qtgolang](https://github.com/qtgolang)
+
+本项目在 SunnyNetTools 的基础上，添加了 **MCP (Model Context Protocol)** 支持，使得 SunnyNet 强大的网络分析功能可以在 AI 应用（如 Cursor、Claude Desktop）中使用。
+
+> **重要声明**：GUI 界面代码来源于 [qtgolang/SunnyNetTools](https://github.com/qtgolang/SunnyNetTools) 开源项目，我们在此基础上增加了 MCP Server 功能。感谢 [@qtgolang](https://github.com/qtgolang) 的卓越贡献和开源精神！
+
+### 本项目的贡献
+
+- [成功] 完整的 MCP Server 实现
+- [成功] 15+ MCP Tools 工具集
+- [成功] Cursor 和 Claude Desktop 集成支持
+- [成功] MCP 协议标准化接口
+- [成功] AI 工作流集成文档
+
 ## 界面预览
 
 <div align="center">
@@ -27,7 +48,7 @@
 
 MCP (Model Context Protocol) 是 Anthropic 开发的协议，允许 AI 应用（如 Claude Desktop、Cursor 等）通过标准化接口调用外部工具和服务。
 
-SunnyNet MCP Server 将强大的网络抓包功能集成到 AI 工作流中，让您可以通过对话的方式进行网络分析。
+SunnyNet MCP Server 将 [SunnyNetTools](https://github.com/qtgolang/SunnyNetTools) 的强大网络抓包功能集成到 AI 工作流中，让您可以通过对话的方式进行网络分析。
 
 ## 功能说明
 
@@ -751,23 +772,42 @@ sunnymcptool/
 
 ## 特别致谢
 
-### 核心贡献者
+### 原作者及核心项目
 
-感谢以下开源项目及其作者的卓越贡献：
+本项目特别感谢 **[@qtgolang](https://github.com/qtgolang)** 及其开源贡献：
 
-- **[qtgolang/SunnyNet](https://github.com/qtgolang/SunnyNet)** - 提供强大的网络中间件核心功能，本项目的基石
+- **[SunnyNet](https://github.com/qtgolang/SunnyNet)** ![GitHub stars](https://img.shields.io/github/stars/qtgolang/SunnyNet?style=social)
+  - 网络中间件核心引擎
+  - 提供 HTTP/HTTPS/WebSocket/TCP/UDP 全协议支持
+  - 本项目的技术基石
+  
+- **[SunnyNetTools](https://github.com/qtgolang/SunnyNetTools)** ![GitHub stars](https://img.shields.io/github/stars/qtgolang/SunnyNetTools?style=social)
+  - **GUI 界面程序源代码**
+  - 基于 Wails + Vue 构建的完整抓包工具
+  - 本项目的 GUI 界面基于此项目开发
+
+> **版权声明**：本项目的 GUI 界面代码来源于 [qtgolang/SunnyNetTools](https://github.com/qtgolang/SunnyNetTools)，我们在其基础上增加了 MCP Server 功能。所有原始代码的版权归 [@qtgolang](https://github.com/qtgolang) 所有。
+
+### 框架和工具
+
+感谢以下优秀的开源框架：
+
 - **[Wails Team](https://wails.io/)** - 优秀的 Go 桌面应用框架，让跨平台开发变得简单
 - **[Vue.js Team](https://vuejs.org/)** - 强大的前端框架，提供流畅的用户体验
-
-### 技术支持
-
 - **[Model Context Protocol](https://modelcontextprotocol.io/)** - Anthropic 开发的 MCP 协议
+
+### 社区支持
+
 - **[Go Team](https://go.dev/)** - Go 语言及其生态系统
 - **所有开源贡献者** - 感谢所有为开源社区做出贡献的开发者
 
 ### 开源精神
 
-本项目秉承开源精神，站在巨人的肩膀上。我们感激所有开源项目的无私奉献，也希望本项目能为社区带来价值。
+本项目秉承开源精神，站在巨人的肩膀上。特别感谢 [@qtgolang](https://github.com/qtgolang) 的 SunnyNet 和 SunnyNetTools 项目，为我们提供了强大的技术基础。我们希望通过添加 MCP 支持，让这些优秀的工具能够在 AI 工作流中发挥更大的价值。
+
+如果您觉得这些项目有帮助，请分别给它们 Star 支持：
+- [SunnyNet](https://github.com/qtgolang/SunnyNet) ⭐
+- [SunnyNetTools](https://github.com/qtgolang/SunnyNetTools) ⭐
 
 ---
 
