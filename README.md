@@ -80,11 +80,11 @@ git clone https://github.com/a121400/sunnymcptool.git
 cd sunnymcptool
 
 # 一键构建全部 (主程序 + MCP独立服务)
-.\build.ps1
+.\scripts\build.ps1
 
 # 或分别构建
-.\build.ps1 -Target gui   # 仅构建 Wails GUI 主程序
-.\build.ps1 -Target mcp   # 仅构建 MCP 独立服务
+.\scripts\build.ps1 -Target gui   # 仅构建 Wails GUI 主程序
+.\scripts\build.ps1 -Target mcp   # 仅构建 MCP 独立服务
 
 # 构建产物在 build/bin/ 目录下
 ```
@@ -712,7 +712,8 @@ sunnymcptool/
 ├── mcp_standalone/                 # MCP 独立服务 (stdio -> HTTP 转发)
 │   └── main.go
 ├── mcp_init.go                     # MCP 桥接适配层
-├── build.ps1                       # 构建脚本
+├── scripts/
+│   └── build.ps1                   # 构建脚本
 ├── go.mod                          # Go 模块配置
 ├── wails.json                      # Wails 配置
 └── README.md                       # 本文档
