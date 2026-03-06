@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
-	"changeme/CommAnd"
-	"changeme/MapHash"
-	"changeme/Resource"
+	"github.com/a121400/sunnymcptool/CommAnd"
+	"github.com/a121400/sunnymcptool/MapHash"
+	"github.com/a121400/sunnymcptool/Resource"
 	"encoding/json"
 	"fmt"
 	"go/format"

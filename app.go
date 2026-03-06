@@ -1,7 +1,7 @@
 package main
 
 import (
-	"changeme/CommAnd"
+	"github.com/a121400/sunnymcptool/CommAnd"
 	"context"
 	"encoding/json"
 	"github.com/qtgolang/SunnyNet/SunnyNet"

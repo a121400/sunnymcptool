@@ -79,11 +79,14 @@ SunnyNet MCP Server 将 [SunnyNetTools](https://github.com/qtgolang/SunnyNetTool
 git clone https://github.com/a121400/sunnymcptool.git
 cd sunnymcptool
 
-# 编译 MCP Server
-go build -o sunnynet-mcp.exe mcp_server.go mcp_tools.go mcp_stdio.go
+# 一键构建全部 (主程序 + MCP独立服务)
+.\build.ps1
 
-# 运行
-./sunnynet-mcp.exe
+# 或分别构建
+.\build.ps1 -Target gui   # 仅构建 Wails GUI 主程序
+.\build.ps1 -Target mcp   # 仅构建 MCP 独立服务
+
+# 构建产物在 build/bin/ 目录下
 ```
 
 ## 配置方法
@@ -98,13 +101,15 @@ go build -o sunnynet-mcp.exe mcp_server.go mcp_tools.go mcp_stdio.go
 {
   "mcpServers": {
     "sunnynet": {
-      "command": "C:\\path\\to\\build\\bin\\SunnyNet.exe",
-      "args": [],
+      "command": "C:\\path\\to\\build\\bin\\sunnynet-mcp.exe",
+      "args": ["-port", "29999"],
       "env": {}
     }
   }
 }
 ```
+
+> 注意: 需要先启动 SunnyNet 主程序 (SunnyNet.exe)，MCP 独立服务通过 HTTP 转发请求到主程序。
 
 ### 在 Claude Desktop 中配置
 
@@ -114,8 +119,8 @@ go build -o sunnynet-mcp.exe mcp_server.go mcp_tools.go mcp_stdio.go
 {
   "mcpServers": {
     "sunnynet": {
-      "command": "C:\\path\\to\\build\\bin\\SunnyNet.exe",
-      "args": []
+      "command": "C:\\path\\to\\build\\bin\\sunnynet-mcp.exe",
+      "args": ["-port", "29999"]
     }
   }
 }
@@ -675,21 +680,42 @@ SunnyNet MCP Server 提供以下完整功能工具：
 ```
 sunnymcptool/
 ├── build/
-│   └── bin/
-│       └── SunnyNet.exe    # 预编译的 MCP Server（推荐使用）
-├── frontend/               # Vue 3 前端界面
+│   ├── bin/
+│   │   ├── SunnyNet.exe            # Wails GUI 主程序 (含 MCP Server)
+│   │   └── sunnynet-mcp.exe        # MCP 独立服务 (stdio 转发)
+│   └── windows/                    # Windows 构建资源
+├── frontend/                       # Vue 3 前端界面
 │   ├── src/
-│   │   ├── components/    # Vue 组件
-│   │   └── main.js        # 入口文件
+│   │   ├── components/             # Vue 组件
+│   │   └── main.js                 # 入口文件
 │   └── package.json
-├── SunnyNet/               # SunnyNet 核心库（子模块）
-├── mcp_server.go           # MCP Server 主程序
-├── mcp_tools.go            # MCP 工具实现
-├── mcp_stdio.go            # MCP 标准输入输出处理
-├── mcp_standalone/         # 独立 MCP Server 版本
-├── go.mod                  # Go 模块配置
-├── wails.json              # Wails 配置
-└── README.md               # 本文档
+├── SunnyNet/                       # SunnyNet 核心库 (本地模块)
+├── CommAnd/                        # 平台命令封装
+├── MapHash/                        # 请求数据存储
+├── Resource/                       # 内置资源
+├── mcp/                            # MCP 协议服务 (独立包)
+│   ├── server.go                   # HTTP 服务器 + JSON-RPC 协议
+│   ├── registry.go                 # 工具注册中心
+│   ├── middleware.go               # 中间件框架 (日志/限流)
+│   ├── validator.go                # 参数校验器
+│   ├── context.go                  # 接口定义 (ProxyApp/AppConfig 等)
+│   └── tools/                      # MCP 工具实现
+│       ├── proxy.go                # 代理控制 (4个)
+│       ├── request.go              # 请求操作 (9个)
+│       ├── cert.go                 # 证书管理 (2个)
+│       ├── process.go              # 进程拦截 (3个)
+│       ├── crypto.go               # 加密分析 (6个)
+│       ├── replace.go              # 替换规则 (4个)
+│       ├── config.go               # 配置管理 (1个)
+│       ├── hosts.go                # HOSTS 规则 (3个)
+│       └── breakpoint.go           # 断点管理 (4个)
+├── mcp_standalone/                 # MCP 独立服务 (stdio -> HTTP 转发)
+│   └── main.go
+├── mcp_init.go                     # MCP 桥接适配层
+├── build.ps1                       # 构建脚本
+├── go.mod                          # Go 模块配置
+├── wails.json                      # Wails 配置
+└── README.md                       # 本文档
 ```
 
 ## 开源技术栈

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"changeme/MapHash"
+	"github.com/a121400/sunnymcptool/MapHash"
 	"encoding/base64"
 	"encoding/binary"
 	"github.com/qtgolang/SunnyNet/src/encoding/hex"

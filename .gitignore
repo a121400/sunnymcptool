@@ -31,3 +31,6 @@ vendor/
 
 # Wails 构建产物
 wails_build_output/
+
+# IDE spec 文件
+.kiro/

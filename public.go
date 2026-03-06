@@ -1,18 +1,10 @@
 package main
 
 import (
-	"changeme/CommAnd"
-	"changeme/MapHash"
-	"changeme/Resource"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/qtgolang/SunnyNet/Api"
-	"github.com/qtgolang/SunnyNet/SunnyNet"
-	"github.com/qtgolang/SunnyNet/public"
-	"github.com/qtgolang/SunnyNet/src/protobuf/JSON"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,6 +14,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/a121400/sunnymcptool/CommAnd"
+	"github.com/a121400/sunnymcptool/MapHash"
+	"github.com/a121400/sunnymcptool/Resource"
+	"github.com/a121400/sunnymcptool/mcp"
+	"github.com/qtgolang/SunnyNet/Api"
+	"github.com/qtgolang/SunnyNet/SunnyNet"
+	"github.com/qtgolang/SunnyNet/public"
+	"github.com/qtgolang/SunnyNet/src/protobuf/JSON"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 var startWork = true
@@ -1497,7 +1499,7 @@ func event(command string, args *JSON.SyJson) any {
 			port = 29999
 		}
 		if mcpServer == nil {
-			mcpServer = NewMCPServer(port)
+			mcpServer = mcp.NewMCPServer(port)
 		}
 		err := mcpServer.Start()
 		if err != nil {

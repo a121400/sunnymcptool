@@ -12,6 +12,9 @@ var assets embed.FS
 var app = NewApp()
 
 func main() {
+	// 初始化 MCP 应用上下文
+	InitMCPContext()
+
 	// Create an instance of the app structure
 	Size := GlobalConfig.Size
 	// Create application with options

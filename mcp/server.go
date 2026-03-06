@@ -1,25 +1,25 @@
-package main
+package mcp
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
 )
 
-// 全局变量
-var mcpServer *MCPServer
-
 // MCPServer MCP服务器结构体
 type MCPServer struct {
-	httpServer *http.Server
-	port       int
-	running    bool
-	mu         sync.RWMutex
-	clients    map[string]chan []byte // SSE客户端连接
-	clientsMu  sync.RWMutex
+	httpServer  *http.Server
+	port        int
+	running     bool
+	mu          sync.RWMutex
+	clients     map[string]chan []byte
+	clientsMu   sync.RWMutex
+	registry    *ToolRegistry
+	middlewares []MiddlewareFunc
 }
 
 // JSON-RPC 2.0 请求结构
@@ -32,10 +32,10 @@ type JSONRPCRequest struct {
 
 // JSON-RPC 2.0 响应结构
 type JSONRPCResponse struct {
-	JSONRPC string           `json:"jsonrpc"`
-	ID      interface{}      `json:"id,omitempty"`
-	Result  interface{}      `json:"result,omitempty"`
-	Error   *JSONRPCError    `json:"error,omitempty"`
+	JSONRPC string        `json:"jsonrpc"`
+	ID      interface{}   `json:"id,omitempty"`
+	Result  interface{}   `json:"result,omitempty"`
+	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
 // JSON-RPC 2.0 错误结构
@@ -88,10 +88,26 @@ type MCPContent struct {
 // NewMCPServer 创建新的MCP服务器实例
 func NewMCPServer(port int) *MCPServer {
 	return &MCPServer{
-		port:    port,
-		running: false,
-		clients: make(map[string]chan []byte),
+		port:        port,
+		running:     false,
+		clients:     make(map[string]chan []byte),
+		registry:    GlobalRegistry,
+		middlewares: make([]MiddlewareFunc, 0),
 	}
+}
+
+// Use 注册中间件
+func (m *MCPServer) Use(mw MiddlewareFunc) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.middlewares = append(m.middlewares, mw)
+}
+
+// ActiveClients 获取当前活跃SSE连接数
+func (m *MCPServer) ActiveClients() int {
+	m.clientsMu.RLock()
+	defer m.clientsMu.RUnlock()
+	return len(m.clients)
 }
 
 // Start 启动MCP服务器
@@ -107,7 +123,6 @@ func (m *MCPServer) Start() error {
 	mux.HandleFunc("/mcp", m.handleMCP)
 	mux.HandleFunc("/mcp/sse", m.handleSSE)
 	mux.HandleFunc("/mcp/health", m.handleHealth)
-	// 添加根路径的消息端点（用于SSE会话的消息发送）
 	mux.HandleFunc("/mcp/message", m.handleMCP)
 
 	m.httpServer = &http.Server{
@@ -118,7 +133,6 @@ func (m *MCPServer) Start() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// 异步启动服务器
 	go func() {
 		err := m.httpServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
@@ -143,7 +157,6 @@ func (m *MCPServer) Stop() error {
 		return nil
 	}
 
-	// 关闭所有SSE客户端连接
 	m.clientsMu.Lock()
 	for id, ch := range m.clients {
 		close(ch)
@@ -182,18 +195,14 @@ func (m *MCPServer) GetPort() int {
 // corsMiddleware CORS中间件
 func (m *MCPServer) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 设置CORS头
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "86400")
-
-		// 处理预检请求
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }
@@ -212,29 +221,24 @@ func (m *MCPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleSSE SSE事件流端点
 func (m *MCPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
-	// 设置SSE响应头
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// 检查是否支持刷新
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "不支持SSE", http.StatusInternalServerError)
 		return
 	}
 
-	// 创建客户端ID和通道
 	clientID := fmt.Sprintf("%d", time.Now().UnixNano())
 	messageChan := make(chan []byte, 100)
 
-	// 注册客户端
 	m.clientsMu.Lock()
 	m.clients[clientID] = messageChan
 	m.clientsMu.Unlock()
 
-	// 清理函数
 	defer func() {
 		m.clientsMu.Lock()
 		delete(m.clients, clientID)
@@ -242,13 +246,11 @@ func (m *MCPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		m.clientsMu.Unlock()
 	}()
 
-	// 发送初始连接事件，包含消息端点URL
 	messageEndpoint := fmt.Sprintf("http://127.0.0.1:%d/mcp/message?sessionId=%s", m.port, clientID)
 	initEvent := fmt.Sprintf("event: endpoint\ndata: %s\n\n", messageEndpoint)
 	w.Write([]byte(initEvent))
 	flusher.Flush()
 
-	// 保持连接并发送消息
 	ctx := r.Context()
 	for {
 		select {
@@ -258,11 +260,9 @@ func (m *MCPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			// 发送SSE事件
 			fmt.Fprintf(w, "event: message\ndata: %s\n\n", string(msg))
 			flusher.Flush()
 		case <-time.After(15 * time.Second):
-			// 发送心跳保持连接
 			fmt.Fprintf(w, ": heartbeat\n\n")
 			flusher.Flush()
 		}
@@ -278,23 +278,25 @@ func (m *MCPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
-	// 解析JSON-RPC请求
 	var request JSONRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		m.writeJSONRPCError(w, nil, -32700, "解析错误", err.Error())
 		return
 	}
 
-	// 验证JSON-RPC版本
 	if request.JSONRPC != "2.0" {
 		m.writeJSONRPCError(w, request.ID, -32600, "无效的请求", "必须使用JSON-RPC 2.0")
 		return
 	}
 
-	// 处理请求并获取响应
-	response := m.handleJSONRPC(request)
+	m.mu.RLock()
+	middlewares := make([]MiddlewareFunc, len(m.middlewares))
+	copy(middlewares, m.middlewares)
+	m.mu.RUnlock()
 
-	// 获取sessionId（如果有的话，同时发送SSE响应）
+	handler := ChainMiddlewares(middlewares, m.handleJSONRPC)
+	response := handler(request)
+
 	sessionId := r.URL.Query().Get("sessionId")
 	if sessionId != "" {
 		m.clientsMu.RLock()
@@ -304,14 +306,13 @@ func (m *MCPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 			respData, _ := json.Marshal(response)
 			select {
 			case ch <- respData:
-				// 同时发送到SSE通道
 			default:
-				// 通道已满，跳过SSE
+				log.Printf("[警告] SSE消息通道已满，丢弃消息: sessionId=%s, method=%s\n",
+					sessionId, request.Method)
 			}
 		}
 	}
 
-	// 始终返回HTTP响应（Cursor可能需要）
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -321,97 +322,53 @@ func (m *MCPServer) handleJSONRPC(request JSONRPCRequest) JSONRPCResponse {
 	case "initialize":
 		return m.handleInitialize(request)
 	case "initialized":
-		// 客户端确认初始化完成，返回空响应
-		return JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      request.ID,
-			Result:  map[string]interface{}{},
-		}
+		return JSONRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]interface{}{}}
 	case "tools/list":
 		return m.handleToolsList(request)
 	case "tools/call":
 		return m.handleToolsCall(request)
 	case "ping":
-		return JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      request.ID,
-			Result:  map[string]interface{}{},
-		}
+		return JSONRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]interface{}{}}
 	default:
 		return JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      request.ID,
-			Error: &JSONRPCError{
-				Code:    -32601,
-				Message: "方法不存在",
-				Data:    fmt.Sprintf("未知方法: %s", request.Method),
-			},
+			JSONRPC: "2.0", ID: request.ID,
+			Error: &JSONRPCError{Code: -32601, Message: "方法不存在", Data: fmt.Sprintf("未知方法: %s", request.Method)},
 		}
 	}
 }
 
-// handleInitialize 处理MCP初始化请求
 func (m *MCPServer) handleInitialize(request JSONRPCRequest) JSONRPCResponse {
-	result := MCPInitializeResult{
-		ProtocolVersion: "2024-11-05",
-		Capabilities: MCPCapabilities{
-			Tools: &MCPToolsCapability{
-				ListChanged: true,
-			},
-		},
-		ServerInfo: MCPServerInfo{
-			Name:    "SunnyNet-MCP",
-			Version: "1.0.0",
-		},
-	}
-
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      request.ID,
-		Result:  result,
+		JSONRPC: "2.0", ID: request.ID,
+		Result: MCPInitializeResult{
+			ProtocolVersion: "2024-11-05",
+			Capabilities:    MCPCapabilities{Tools: &MCPToolsCapability{ListChanged: true}},
+			ServerInfo:      MCPServerInfo{Name: "SunnyNet-MCP", Version: "1.0.0"},
+		},
 	}
 }
 
-// handleToolsList 处理工具列表请求
 func (m *MCPServer) handleToolsList(request JSONRPCRequest) JSONRPCResponse {
-	tools := GetToolsList()
-	result := MCPToolsListResult{
-		Tools: tools,
-	}
-
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      request.ID,
-		Result:  result,
+		JSONRPC: "2.0", ID: request.ID,
+		Result: MCPToolsListResult{Tools: m.registry.GetToolsList()},
 	}
 }
 
-// handleToolsCall 处理工具调用请求
 func (m *MCPServer) handleToolsCall(request JSONRPCRequest) JSONRPCResponse {
-	// 从参数中提取工具名和参数
 	params := request.Params
 	if params == nil {
 		return JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      request.ID,
-			Error: &JSONRPCError{
-				Code:    -32602,
-				Message: "无效的参数",
-				Data:    "缺少必要参数",
-			},
+			JSONRPC: "2.0", ID: request.ID,
+			Error: &JSONRPCError{Code: -32602, Message: "无效的参数", Data: "缺少必要参数"},
 		}
 	}
 
 	toolName, ok := params["name"].(string)
 	if !ok {
 		return JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      request.ID,
-			Error: &JSONRPCError{
-				Code:    -32602,
-				Message: "无效的参数",
-				Data:    "缺少工具名称",
-			},
+			JSONRPC: "2.0", ID: request.ID,
+			Error: &JSONRPCError{Code: -32602, Message: "无效的参数", Data: "缺少工具名称"},
 		}
 	}
 
@@ -422,58 +379,36 @@ func (m *MCPServer) handleToolsCall(request JSONRPCRequest) JSONRPCResponse {
 		args = make(map[string]interface{})
 	}
 
-	// 调用工具
-	result, err := CallTool(toolName, args)
+	result, err := m.registry.Call(toolName, args)
 	if err != nil {
-		// 返回错误结果
 		return JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      request.ID,
+			JSONRPC: "2.0", ID: request.ID,
 			Result: MCPToolCallResult{
-				Content: []MCPContent{
-					{
-						Type: "text",
-						Text: fmt.Sprintf("错误: %v", err),
-					},
-				},
+				Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("错误: %v", err)}},
 				IsError: true,
 			},
 		}
 	}
 
-	// 将结果转换为JSON字符串
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
 		resultJSON = []byte(fmt.Sprintf("%v", result))
 	}
 
 	return JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      request.ID,
+		JSONRPC: "2.0", ID: request.ID,
 		Result: MCPToolCallResult{
-			Content: []MCPContent{
-				{
-					Type: "text",
-					Text: string(resultJSON),
-				},
-			},
+			Content: []MCPContent{{Type: "text", Text: string(resultJSON)}},
 			IsError: false,
 		},
 	}
 }
 
-// writeJSONRPCError 写入JSON-RPC错误响应
 func (m *MCPServer) writeJSONRPCError(w http.ResponseWriter, id interface{}, code int, message string, data interface{}) {
-	response := JSONRPCResponse{
-		JSONRPC: "2.0",
-		ID:      id,
-		Error: &JSONRPCError{
-			Code:    code,
-			Message: message,
-			Data:    data,
-		},
-	}
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(JSONRPCResponse{
+		JSONRPC: "2.0", ID: id,
+		Error: &JSONRPCError{Code: code, Message: message, Data: data},
+	})
 }
 
 // SendToClient 向指定客户端发送消息
@@ -481,15 +416,14 @@ func (m *MCPServer) SendToClient(clientID string, message []byte) bool {
 	m.clientsMu.RLock()
 	ch, exists := m.clients[clientID]
 	m.clientsMu.RUnlock()
-
 	if !exists {
 		return false
 	}
-
 	select {
 	case ch <- message:
 		return true
 	default:
+		log.Printf("[警告] SSE消息通道已满，丢弃消息: clientId=%s\n", clientID)
 		return false
 	}
 }
@@ -498,12 +432,11 @@ func (m *MCPServer) SendToClient(clientID string, message []byte) bool {
 func (m *MCPServer) BroadcastToAll(message []byte) {
 	m.clientsMu.RLock()
 	defer m.clientsMu.RUnlock()
-
-	for _, ch := range m.clients {
+	for clientID, ch := range m.clients {
 		select {
 		case ch <- message:
 		default:
-			// 通道已满，跳过
+			log.Printf("[警告] SSE消息通道已满，丢弃消息: clientId=%s\n", clientID)
 		}
 	}
 }

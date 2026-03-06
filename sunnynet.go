@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"changeme/CommAnd"
-	"changeme/MapHash"
+	"github.com/a121400/sunnymcptool/CommAnd"
+	"github.com/a121400/sunnymcptool/MapHash"
 	"compress/flate"
 	"compress/gzip"
 	"fmt"
