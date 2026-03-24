@@ -782,7 +782,6 @@ export default {
             obj.data.color = {selected: selectedColor}
           }
         }
-        setTimeout(() => { this.RefreshRenderedNodes() }, 200)
       }
       this.onContextMenu();
       return getMenuItems(this.MenuItems)
