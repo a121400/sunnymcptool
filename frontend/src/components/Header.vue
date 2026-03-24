@@ -110,17 +110,20 @@
               </div>
             </div>
           </el-menu-item>
-          <el-menu-item index="MCP服务">
+          <el-menu-item index="MCP服务" :disabled="true">
             <div style="display: flex; align-items: center;">
-              <div style="cursor: pointer; display: flex; align-items: center;position: relative;top:1px">
-                <el-icon v-show="McpRunning===false">
-                  <CircleCloseFilled/>
+              <div style="display: flex; align-items: center;position: relative;top:1px">
+                <el-icon v-show="McpError" style="color: #E6A23C">
+                  <WarningFilled/>
                 </el-icon>
-                <el-icon v-show="McpRunning">
+                <el-icon v-show="McpRunning && !McpError" style="color: #67C23A">
                   <SuccessFilled/>
                 </el-icon>
+                <el-icon v-show="!McpRunning && !McpError" style="color: #909399">
+                  <Loading/>
+                </el-icon>
                 <el-tooltip class="item" effect="dark"
-                            :content="McpRunning ? 'MCP服务运行中 端口:'+McpPort : 'MCP服务已停止'"
+                            :content="McpError ? 'MCP异常: '+McpError : (McpRunning ? 'MCP运行中 端口:'+McpPort : 'MCP启动中...')"
                             placement="top">
                   <span>MCP</span>
                 </el-tooltip>
@@ -250,7 +253,7 @@ import '../../wailsjs/runtime/runtime.js';
 import {EventsOn, WindowMinimise, WindowToggleMaximise} from "../../wailsjs/runtime/runtime.js";
 import {Do} from "../../wailsjs/go/main/App.js";
 import {CallGoDo, EventsDo, StrBase64Encode} from "./CallbackEventsOn.js";
-import {CircleCloseFilled, SuccessFilled} from '@element-plus/icons-vue'
+import {CircleCloseFilled, SuccessFilled, WarningFilled, Loading} from '@element-plus/icons-vue'
 import {ElMessage} from "element-plus";
 import Doc from "./CertDoc/Doc.vue";
 import OpenSourceProtocol from "./OpenSourceProtocol/OpenSourceProtocol.vue";
@@ -319,6 +322,7 @@ export default {
       AutoRollShow: false,
       McpRunning: false,
       McpPort: 29999,
+      McpError: '',
       WayContent: [
         {
           ip: '暂未获取到',
@@ -425,9 +429,8 @@ export default {
         return
       }
 
-      //MCP服务
+      //MCP服务 (纯状态显示，无需操作)
       if (key === "MCP服务") {
-        this.toggleMcp()
         return
       }
 
@@ -573,30 +576,11 @@ export default {
     ReleaseAll() {
       CallGoDo("全部放行", null)
     },
-    toggleMcp() {
-      if (this.McpRunning) {
-        CallGoDo("停止MCP", null).then(res => {
-          if (res.success) {
-            this.McpRunning = false
-            ElMessage({ message: "MCP服务已停止", type: 'success' })
-          }
-        })
-      } else {
-        CallGoDo("启动MCP", { Port: this.McpPort }).then(res => {
-          if (res.success) {
-            this.McpRunning = true
-            this.McpPort = res.port
-            ElMessage({ message: "MCP服务已启动，端口: " + res.port, type: 'success' })
-          } else {
-            ElMessage({ message: "MCP服务启动失败: " + res.error, type: 'error' })
-          }
-        })
-      }
-    },
     getMcpStatus() {
       CallGoDo("获取MCP状态", null).then(res => {
         this.McpRunning = res.running
         this.McpPort = res.port
+        this.McpError = res.error || ''
       })
     },
     clickRemoveAll(mode) {
@@ -654,6 +638,7 @@ export default {
     }
     window.vm.Header = this
     this.getMcpStatus()
+    setTimeout(() => { this.getMcpStatus() }, 2000)
 
     this.$nextTick(() => {
       CallGoDo("获取内网IP", null).then(res => {

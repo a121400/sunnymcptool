@@ -158,6 +158,32 @@ func init() {
 	})
 
 	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "request_save_all",
+		Description: "保存全部已捕获的请求数据到.syn文件（SunnyNet抓包记录格式）",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"path": map[string]interface{}{"type": "string", "description": "保存文件路径（如：C:/data/capture.syn）"},
+			},
+			"required": []string{"path"},
+		},
+		Handler: toolRequestSaveAllHandler,
+	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "request_import",
+		Description: "从.syn文件导入抓包记录数据到当前列表",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"path": map[string]interface{}{"type": "string", "description": ".syn文件路径（如：C:/data/capture.syn）"},
+			},
+			"required": []string{"path"},
+		},
+		Handler: toolRequestImportHandler,
+	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
 		Name:        "request_search",
 		Description: "搜索过滤已捕获的请求，支持按URL关键词、HTTP方法、状态码过滤，支持分页",
 		InputSchema: map[string]interface{}{
@@ -446,5 +472,50 @@ func toolRequestSearchHandler(args map[string]interface{}) (interface{}, error) 
 
 	return map[string]interface{}{
 		"success": true, "total": totalMatched, "offset": offset, "limit": limit, "requests": requests,
+	}, nil
+}
+
+func toolRequestSaveAllHandler(args map[string]interface{}) (interface{}, error) {
+	v := mcp.NewParamValidator(args)
+	path := v.RequireString("path")
+	if err := v.Error(); err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nil, errors.New("文件路径不能为空")
+	}
+
+	dio := ctx().DataIO
+	if dio == nil {
+		return nil, errors.New("数据导入导出模块未初始化")
+	}
+	if err := dio.SaveAllToFile(path); err != nil {
+		return nil, fmt.Errorf("保存失败: %v", err)
+	}
+	return map[string]interface{}{
+		"success": true, "path": path, "message": "全部抓包数据已保存",
+	}, nil
+}
+
+func toolRequestImportHandler(args map[string]interface{}) (interface{}, error) {
+	v := mcp.NewParamValidator(args)
+	path := v.RequireString("path")
+	if err := v.Error(); err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nil, errors.New("文件路径不能为空")
+	}
+
+	dio := ctx().DataIO
+	if dio == nil {
+		return nil, errors.New("数据导入导出模块未初始化")
+	}
+	count, err := dio.ImportFromFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("导入失败: %v", err)
+	}
+	return map[string]interface{}{
+		"success": true, "path": path, "imported": count, "message": fmt.Sprintf("已导入 %d 条记录", count),
 	}, nil
 }

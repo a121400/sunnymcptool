@@ -1,14 +1,21 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/a121400/sunnymcptool/MapHash"
 	"github.com/a121400/sunnymcptool/mcp"
-	// 导入 tools 包触发 init() 注册
 	_ "github.com/a121400/sunnymcptool/mcp/tools"
 	"github.com/qtgolang/SunnyNet/src/JsCall"
 )
 
 // 全局MCP服务器实例
 var mcpServer *mcp.MCPServer
+var mcpStartError string
 
 // proxyAppAdapter 将 main 包的 app 适配为 mcp.ProxyApp 接口
 type proxyAppAdapter struct{}
@@ -93,6 +100,7 @@ func (c *appConfigAdapter) SetReplaceRules(rules []mcp.ConfigReplaceRule) {
 	for i, r := range rules {
 		GlobalConfig.ReplaceRules[i] = ConfigReplaceRules{Type: r.Type, Src: r.Src, Dest: r.Dest, Hash: r.Hash}
 	}
+	RebuildReplaceRulesFromConfig()
 }
 
 func (c *appConfigAdapter) GetHostsRules() []mcp.ConfigReplaceRule {
@@ -110,97 +118,112 @@ func (c *appConfigAdapter) SetHostsRules(rules []mcp.ConfigReplaceRule) {
 	}
 }
 
-// cryptoAnalyzerAdapter 将 cryptoAnalyzer 适配为 mcp.CryptoAnalyzer 接口
-type cryptoAnalyzerAdapter struct{}
+// dataIOAdapter 数据导入导出适配器
+type dataIOAdapter struct{}
 
-func (a *cryptoAnalyzerAdapter) ParsePacket(data []byte) (header interface{}, rawHex, payloadHex, decryptedHex, protobufTree string, err error) {
-	if cryptoAnalyzer == nil {
-		return nil, "", "", "", "", nil
+func (d *dataIOAdapter) SaveAllToFile(path string) error {
+	if !strings.HasSuffix(strings.ToLower(path), ".syn") {
+		path += ".syn"
 	}
-	result, e := cryptoAnalyzer.ParsePacket(data)
+	ok := HashMap.SaveToFile(path, true, nil, func(s string) {})
+	if !ok {
+		return fmt.Errorf("保存失败")
+	}
+	return nil
+}
+
+func (d *dataIOAdapter) ImportFromFile(path string) (int, error) {
+	bs, e := os.ReadFile(path)
 	if e != nil {
-		return nil, "", "", "", "", e
+		return 0, fmt.Errorf("读取文件失败: %v", e)
 	}
-	return result.Header, result.RawHex, result.PayloadHex, result.DecryptedHex, result.ProtobufTree, nil
-}
-
-func (a *cryptoAnalyzerAdapter) ParseProtobuf(data []byte, skip int) string {
-	if cryptoAnalyzer == nil {
-		return ""
+	DATA := MapHash.BrUnCompress(bs)
+	var openData []*MapHash.Request
+	e = json.Unmarshal(DATA, &openData)
+	if e != nil {
+		return 0, fmt.Errorf("解析文件失败: %v", e)
 	}
-	return cryptoAnalyzer.ParseProtobuf(data, skip)
-}
-
-func (a *cryptoAnalyzerAdapter) GetCurrentConfigName() string {
-	if cryptoAnalyzer == nil {
-		return ""
+	var listInfo []ListInfo
+	for _, v := range openData {
+		if v == nil {
+			continue
+		}
+		theology := HashMap.CreateUniqueID()
+		HashMap.SetRequest(theology, v)
+		state := strconv.Itoa(v.Response.StateCode)
+		if !strings.Contains(strings.ToUpper(v.URL), "HTTP") {
+			state = "已断开"
+		}
+		responseType := ""
+		method := v.Method
+		ico := "websocket_close"
+		responseLen := ""
+		if v.Way == "Websocket" {
+			method = "Websocket"
+			responseType = "Websocket"
+			responseLen = strconv.Itoa(v.SendNum) + "/" + strconv.Itoa(v.RecNum)
+		} else if v.Way == "UDP" {
+			method = "UDP"
+			responseType = "UDP"
+			responseLen = strconv.Itoa(v.SendNum) + "/" + strconv.Itoa(v.RecNum)
+		} else if strings.Contains(strings.ToUpper(method), "TCP") {
+			responseLen = strconv.Itoa(v.SendNum) + "/" + strconv.Itoa(v.RecNum)
+			responseType = method
+		} else {
+			if v.Response.Header != nil {
+				a := v.Response.Header["Content-Type"]
+				if len(a) > 0 {
+					responseType = a[0]
+				} else {
+					a = v.Response.Header["content-type"]
+					if len(a) > 0 {
+						responseType = a[0]
+					}
+				}
+				if responseType != "" {
+					arr := strings.Split(responseType+";", ";")
+					if len(arr) > 0 {
+						responseType = arr[0]
+					}
+				}
+			}
+			ico = UpdateIco(v, responseType)
+			responseLen = strconv.Itoa(len(v.Response.Body))
+		}
+		tmp := ListInfo{
+			MessageId: -1,
+			Theology:  theology,
+			State:     state,
+			URL:       v.URL,
+			ClientIP:  v.ClientIP,
+			PID:       v.PID,
+			Method:    method,
+			Ico:       ico,
+			Len:       responseLen,
+			Type:      responseType,
+			SendTime:  v.SendTime,
+			RecTime:   v.RecTime,
+			Notes:     v.Notes,
+		}
+		tmp.Color.TagColor = v.Color.TagColor
+		tmp.Color.Search = v.Color.Search
+		listInfo = append(listInfo, tmp)
 	}
-	config := cryptoAnalyzer.GetCurrentConfig()
-	if config == nil {
-		return ""
+	if len(listInfo) > 0 {
+		CallJs("插入列表", listInfo)
 	}
-	return config.Name
-}
-
-func (a *cryptoAnalyzerAdapter) GetCurrentConfig() (name, aesKey, aesIV string, headerSize int, msgNames map[int]string, ok bool) {
-	if cryptoAnalyzer == nil {
-		return "", "", "", 0, nil, false
-	}
-	config := cryptoAnalyzer.GetCurrentConfig()
-	if config == nil {
-		return "", "", "", 0, nil, false
-	}
-	return config.Name, config.AESKey, config.AESIV, config.HeaderSize, config.MsgNames, true
-}
-
-func (a *cryptoAnalyzerAdapter) GetAllConfigs() []mcp.CryptoConfigInfo {
-	if cryptoAnalyzer == nil {
-		return nil
-	}
-	configs := cryptoAnalyzer.GetAllConfigs()
-	currentConfig := cryptoAnalyzer.GetCurrentConfig()
-	currentName := ""
-	if currentConfig != nil {
-		currentName = currentConfig.Name
-	}
-	result := make([]mcp.CryptoConfigInfo, 0, len(configs))
-	for _, cfg := range configs {
-		result = append(result, mcp.CryptoConfigInfo{
-			Name: cfg.Name, AESKey: cfg.AESKey, AESIV: cfg.AESIV,
-			HeaderSize: cfg.HeaderSize, IsCurrent: cfg.Name == currentName,
-		})
-	}
-	return result
-}
-
-func (a *cryptoAnalyzerAdapter) AddConfig(name, aesKey, aesIV string, headerSize int) {
-	if cryptoAnalyzer == nil {
-		return
-	}
-	config := &CryptoConfig{
-		Name: name, AESKey: aesKey, AESIV: aesIV,
-		HeaderSize: headerSize, MsgNames: make(map[int]string),
-	}
-	cryptoAnalyzer.AddConfig(config)
-}
-
-func (a *cryptoAnalyzerAdapter) SetCurrentConfig(name string) error {
-	if cryptoAnalyzer == nil {
-		return nil
-	}
-	return cryptoAnalyzer.SetCurrentConfig(name)
+	return len(openData), nil
 }
 
 // InitMCPContext 初始化 MCP 应用上下文
-// 必须在 app 和 GlobalConfig 初始化之后调用
 func InitMCPContext() {
 	mcp.GlobalAppContext = &mcp.AppContext{
-		App:            &proxyAppAdapter{},
-		Config:         &appConfigAdapter{},
-		HashMap:        HashMap,
-		TmpLock:        &_TmpLock,
-		HostsRuleMgr:   &hostsRuleManagerAdapter{},
-		CryptoAnalyzer: &cryptoAnalyzerAdapter{},
+		App:          &proxyAppAdapter{},
+		Config:       &appConfigAdapter{},
+		HashMap:      HashMap,
+		TmpLock:      &_TmpLock,
+		HostsRuleMgr: &hostsRuleManagerAdapter{},
+		DataIO:       &dataIOAdapter{},
 	}
 }
 

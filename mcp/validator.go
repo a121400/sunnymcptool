@@ -88,6 +88,33 @@ func (v *ParamValidator) OptionalString(name string, defaultVal string) string {
 	return s
 }
 
+// RequireIntArray 提取必需的整数数组参数
+func (v *ParamValidator) RequireIntArray(name string) []int {
+	val, exists := v.args[name]
+	if !exists {
+		v.errors = append(v.errors, fmt.Sprintf("缺少必需参数 '%s' (期望类型: []int)", name))
+		return nil
+	}
+	arr, ok := val.([]interface{})
+	if !ok {
+		v.errors = append(v.errors, fmt.Sprintf("参数 '%s' 类型错误: 期望 []int, 实际 %T", name, val))
+		return nil
+	}
+	result := make([]int, 0, len(arr))
+	for _, item := range arr {
+		switch n := item.(type) {
+		case float64:
+			result = append(result, int(n))
+		case int:
+			result = append(result, n)
+		default:
+			v.errors = append(v.errors, fmt.Sprintf("参数 '%s' 数组元素类型错误: 期望 int, 实际 %T", name, item))
+			return nil
+		}
+	}
+	return result
+}
+
 // Error 返回验证错误，无错误返回 nil
 func (v *ParamValidator) Error() error {
 	if len(v.errors) == 0 {

@@ -22,6 +22,50 @@ type ReplaceRules struct {
 
 var _ReplaceRules []ReplaceRules
 
+func RebuildReplaceRulesFromConfig() {
+	var rules []ReplaceRules
+	for _, v := range GlobalConfig.ReplaceRules {
+		_source := v.Src
+		_target := v.Dest
+		if _source == "" {
+			continue
+		}
+		switch v.Type {
+		case "Base64":
+			bs1, e := base64.StdEncoding.DecodeString(_source)
+			if e != nil {
+				continue
+			}
+			bs2, e := base64.StdEncoding.DecodeString(_target)
+			if e != nil {
+				continue
+			}
+			rules = append(rules, ReplaceRules{Type: ReplaceRulesType_Bytes, source: bs1, target: bs2})
+		case "HEX":
+			bs1, e := hex.DecodeString(_source)
+			if e != nil {
+				continue
+			}
+			bs2, e := hex.DecodeString(_target)
+			if e != nil {
+				continue
+			}
+			rules = append(rules, ReplaceRules{Type: ReplaceRulesType_Bytes, source: bs1, target: bs2})
+		case "String(UTF8)":
+			rules = append(rules, ReplaceRules{Type: ReplaceRulesType_Bytes, source: []byte(_source), target: []byte(_target)})
+		case "String(GBK)":
+			rules = append(rules, ReplaceRules{Type: ReplaceRulesType_Bytes, source: Utf8ToGBK([]byte(_source)), target: Utf8ToGBK([]byte(_target))})
+		case "响应文件":
+			bs1, e := os.ReadFile(_target)
+			if e != nil {
+				continue
+			}
+			rules = append(rules, ReplaceRules{Type: ReplaceRulesType_File, source: []byte(_source), target: bs1})
+		}
+	}
+	_ReplaceRules = rules
+}
+
 func ReplaceRulesEvent(command string, args *JSON.SyJson) any {
 	switch command {
 	case "保存替换规则":

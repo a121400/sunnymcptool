@@ -56,26 +56,6 @@ type AppConfig interface {
 	Save() error
 }
 
-// CryptoAnalyzer 加密分析器接口
-type CryptoAnalyzer interface {
-	ParsePacket(data []byte) (header interface{}, rawHex, payloadHex, decryptedHex, protobufTree string, err error)
-	ParseProtobuf(data []byte, skip int) string
-	GetCurrentConfigName() string
-	GetCurrentConfig() (name, aesKey, aesIV string, headerSize int, msgNames map[int]string, ok bool)
-	GetAllConfigs() []CryptoConfigInfo
-	AddConfig(name, aesKey, aesIV string, headerSize int)
-	SetCurrentConfig(name string) error
-}
-
-// CryptoConfigInfo 加密配置信息
-type CryptoConfigInfo struct {
-	Name       string
-	AESKey     string
-	AESIV      string
-	HeaderSize int
-	IsCurrent  bool
-}
-
 // HostsRuleManager HOSTS 内部规则管理接口
 type HostsRuleManager interface {
 	// GetRules 获取当前内部 HOSTS 规则
@@ -86,14 +66,20 @@ type HostsRuleManager interface {
 	AppendRule(rule HostsRule)
 }
 
+// DataIO 数据导入导出接口
+type DataIO interface {
+	SaveAllToFile(path string) error
+	ImportFromFile(path string) (int, error)
+}
+
 // AppContext 应用上下文 - 工具通过此接口访问 main 包的全局变量
 type AppContext struct {
-	App              ProxyApp
-	Config           AppConfig
-	HashMap          *MapHash.Map
-	TmpLock          *sync.Mutex
-	HostsRuleMgr     HostsRuleManager
-	CryptoAnalyzer   CryptoAnalyzer
+	App            ProxyApp
+	Config         AppConfig
+	HashMap        *MapHash.Map
+	TmpLock        *sync.Mutex
+	HostsRuleMgr HostsRuleManager
+	DataIO       DataIO
 }
 
 // 全局应用上下文实例

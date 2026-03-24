@@ -761,7 +761,29 @@ export default {
         this.MenuItems[7].visible = true
         this.MenuItems[9].visible = true
       }
-      this.onRowClicked(params)
+      if (params && params.node) {
+        if (this.agSelectedLine) {
+          const obj = this.RowDataHashMap[this.agSelectedLine.data.Theology]
+          if (obj) {
+            if (obj.data.color) {
+              obj.data.color.selected = {}
+            } else {
+              obj.data.color = {selected: {}}
+            }
+          }
+        }
+        this.agSelectedLine = params.node
+        const obj = this.RowDataHashMap[this.agSelectedLine.data.Theology]
+        if (obj) {
+          const selectedColor = {dark: '#1b5168', right: "#b0c5cc"}
+          if (obj.data.color) {
+            obj.data.color.selected = selectedColor
+          } else {
+            obj.data.color = {selected: selectedColor}
+          }
+        }
+        setTimeout(() => { this.RefreshRenderedNodes() }, 200)
+      }
       this.onContextMenu();
       return getMenuItems(this.MenuItems)
     }

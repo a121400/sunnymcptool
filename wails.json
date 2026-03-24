@@ -14,14 +14,15 @@
     "admin": true,
     "ldflags": [
       "-H=windowsgui",
-      "-ManifestUACLevel=requireAdministrator"
+      "-ManifestUACLevel=requireAdministrator",
+      "-extldflags=-static"
     ]
   },
   "info": {
     "companyName": "SunnyNet",
     "productName": "SunnyNet",
-    "productVersion": "1.0.2.8",
-    "copyright": "SunnyNet抓包工具1.0.2.8",
-    "comments": "SunnyNet抓包工具1.0.2.8"
+    "productVersion": "1.0.3.0",
+    "copyright": "SunnyNet抓包工具1.0.3.0",
+    "comments": "SunnyNet抓包工具1.0.3.0"
   }
 }
