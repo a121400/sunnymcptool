@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $OutputDir = "build\bin"
-$Version = "1.0.3.0"
+$Version = "1.0.4.0"
 
 function Write-Step($msg) {
     Write-Host "[Build] $msg" -ForegroundColor Cyan
