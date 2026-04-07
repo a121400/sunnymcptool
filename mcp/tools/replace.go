@@ -128,7 +128,7 @@ func toolReplaceRulesAddHandler(args map[string]interface{}) (interface{}, error
 	c.TmpLock.Unlock()
 
 	if c.NotifyUI != nil {
-		c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "add"})
+		c.NotifyUI("MCP替换规则变更", c.Config.GetReplaceRules())
 	}
 	return map[string]interface{}{
 		"success": true,
@@ -165,7 +165,7 @@ func toolReplaceRulesRemoveHandler(args map[string]interface{}) (interface{}, er
 		c.Config.SetReplaceRules(newRules)
 		_ = c.Config.Save()
 		if c.NotifyUI != nil {
-			c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "remove"})
+			c.NotifyUI("MCP替换规则变更", newRules)
 		}
 		return map[string]interface{}{
 			"success": true,
@@ -188,7 +188,7 @@ func toolReplaceRulesRemoveHandler(args map[string]interface{}) (interface{}, er
 	c.Config.SetReplaceRules(newRules)
 	_ = c.Config.Save()
 	if c.NotifyUI != nil {
-		c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "remove"})
+		c.NotifyUI("MCP替换规则变更", newRules)
 	}
 
 	return map[string]interface{}{
@@ -207,7 +207,7 @@ func toolReplaceRulesClearHandler(args map[string]interface{}) (interface{}, err
 	_ = c.Config.Save()
 
 	if c.NotifyUI != nil {
-		c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "clear"})
+		c.NotifyUI("MCP替换规则变更", []mcp.ConfigReplaceRule{})
 	}
 	return map[string]interface{}{
 		"success": true,

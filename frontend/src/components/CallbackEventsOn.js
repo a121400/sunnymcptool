@@ -793,6 +793,17 @@ export async function EventsDo(arg) {
             window.vm.List.index = 0
             return
         }
+        case "MCP替换规则变更": {
+            const ref = window.vm.Settings && window.vm.Settings.$refs.Replace
+            if (ref) {
+                if (Args && Args.length > 0) {
+                    ref.AddLines(Args)
+                } else {
+                    ref.Empty()
+                }
+            }
+            return
+        }
         default:
             console.log(arg.Command, arg)
             return
