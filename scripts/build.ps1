@@ -4,7 +4,8 @@
 param(
     [ValidateSet("all", "gui", "mcp")]
     [string]$Target = "all",
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$NoCompress
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +45,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  Go: $goVersion"
 
+function Compress-WithUPX($filePath) {
+    if ($NoCompress) { return }
+    $upx = Get-Command upx -ErrorAction SilentlyContinue
+    if (-not $upx) { return }
+    $before = (Get-Item $filePath).Length / 1MB
+    Write-Step "Compressing $(Split-Path $filePath -Leaf) with UPX..."
+    & $upx.Source --best --lzma $filePath 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $after = (Get-Item $filePath).Length / 1MB
+        $ratio = [math]::Round(($before - $after) / $before * 100, 1)
+        Write-Ok ("Compressed: " + [string]([math]::Round($before, 2)) + " MB -> " + [string]([math]::Round($after, 2)) + " MB (-${ratio}%)")
+    }
+}
+
 function Build-MCP {
     Write-Step "Building MCP (sunnynet-mcp.exe, static)..."
     $ldflags = "-s -w -X main.Version=$Version -extldflags=-static"
@@ -56,6 +71,7 @@ function Build-MCP {
     }
     $size = (Get-Item "$OutputDir\sunnynet-mcp.exe").Length / 1MB
     Write-Ok ("sunnynet-mcp.exe " + [string]([math]::Round($size, 2)) + " MB")
+    Compress-WithUPX "$OutputDir\sunnynet-mcp.exe"
 }
 
 function Build-GUI {
@@ -75,6 +91,7 @@ function Build-GUI {
     }
     $size = (Get-Item "$OutputDir\SunnyNet.exe").Length / 1MB
     Write-Ok ("SunnyNet.exe " + [string]([math]::Round($size, 2)) + " MB")
+    Compress-WithUPX "$OutputDir\SunnyNet.exe"
 }
 
 switch ($Target) {

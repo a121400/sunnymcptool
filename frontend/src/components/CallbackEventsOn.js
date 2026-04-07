@@ -358,7 +358,7 @@ export async function EventsDo(arg) {
             for (let i = 0; i < Args.length; i++) {
                 let obj = window.vm.List.RowDataHashMap[Args[i].Theology]
                 if (!obj) {
-                    Args[i]["序号"] = (window.vm.List.index++) + 1
+                    Args[i]["序号"] = Args[i].Theology
                     let query = Args[i]["请求地址"]
                     if (query.startsWith("https://") || query.startsWith("http://")) {
                         let ar = query.split("/")
@@ -719,6 +719,80 @@ export async function EventsDo(arg) {
         case "更新搜索进度":
             window.vm.Find.per = Args
             return
+        case "MCP设置IE代理状态":
+            if (window.vm.IEProxy) {
+                window.vm.IEProxy.state = Args.state
+                window.vm.IEProxy.title = Args.state ? "已设置系统IE代理" : "未设置系统IE代理"
+            }
+            return
+        case "MCP设置捕获状态":
+            if (window.vm.HookState) {
+                window.vm.HookState.setState(Args.state)
+            }
+            return
+        case "MCP搜索高亮": {
+            if (!Args) return
+            const searchResult = Args.SearchResult
+            const lastSearch = Args.LastSearchResult
+            const color = Args.Color
+            if (lastSearch) {
+                for (let i = 0; i < lastSearch.length; i++) {
+                    const obj = window.vm.List.RowDataHashMap[lastSearch[i]]
+                    if (obj) {
+                        obj.data.color.search = null
+                        obj.setData(obj.data)
+                    }
+                }
+            }
+            if (searchResult) {
+                for (let i = 0; i < searchResult.length; i++) {
+                    const obj = window.vm.List.RowDataHashMap[searchResult[i]]
+                    if (obj) {
+                        obj.data.color.search = color
+                        obj.setData(obj.data)
+                    }
+                }
+            }
+            IsRefreshRenderedNodes = true
+            return
+        }
+        case "MCP取消搜索高亮": {
+            if (Args) {
+                for (let i = 0; i < Args.length; i++) {
+                    const obj = window.vm.List.RowDataHashMap[Args[i]]
+                    if (obj) {
+                        obj.data.color.search = null
+                        obj.setData(obj.data)
+                    }
+                }
+            }
+            IsRefreshRenderedNodes = true
+            return
+        }
+        case "MCP删除请求": {
+            if (!Args) return
+            const removeList = []
+            for (let i = 0; i < Args.length; i++) {
+                const obj = window.vm.List.RowDataHashMap[Args[i]]
+                if (obj) {
+                    removeList.push(obj.data)
+                    delete window.vm.List.RowDataHashMap[Args[i]]
+                }
+            }
+            if (removeList.length > 0) {
+                window.vm.List.agGridApi.applyTransaction({remove: removeList})
+            }
+            return
+        }
+        case "MCP清空列表": {
+            window.vm.List.RowDataHashMap = {}
+            window.vm.List.RowData = []
+            window.vm.List.agGridApi.setRowData([])
+            window.vm.List.agSelectedArray = []
+            window.vm.List.agSelectedLine = null
+            window.vm.List.index = 0
+            return
+        }
         default:
             console.log(arg.Command, arg)
             return

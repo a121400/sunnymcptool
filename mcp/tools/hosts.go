@@ -131,6 +131,9 @@ func toolHostsAddHandler(args map[string]interface{}) (interface{}, error) {
 		Target: processedTarget,
 	})
 
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP HOSTS规则变更", map[string]interface{}{"action": "add"})
+	}
 	return map[string]interface{}{
 		"success": true,
 		"rule": map[string]interface{}{
@@ -168,6 +171,9 @@ func toolHostsRemoveHandler(args map[string]interface{}) (interface{}, error) {
 	// 重建内部规则
 	reloadHostsRulesFromConfig(c)
 
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP HOSTS规则变更", map[string]interface{}{"action": "remove"})
+	}
 	return map[string]interface{}{
 		"success": true,
 		"removed": map[string]interface{}{

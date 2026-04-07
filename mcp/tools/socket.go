@@ -3,7 +3,6 @@ package tools
 import (
 	"encoding/base64"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/a121400/sunnymcptool/MapHash"
@@ -117,12 +116,14 @@ func toolSocketDataListHandler(args map[string]interface{}) (interface{}, error)
 			pkt["type"] = sd.Info.WsType
 		}
 		if sd.Body != nil && len(sd.Body) > 0 {
-			preview := string(sd.Body)
-			if len(preview) > 200 {
-				preview = preview[:200] + "..."
-			}
 			if isPrintable(sd.Body) {
-				pkt["preview"] = preview
+				previewBytes := sd.Body
+				suffix := ""
+				if len(previewBytes) > 200 {
+					previewBytes = previewBytes[:200]
+					suffix = "..."
+				}
+				pkt["preview"] = string(previewBytes) + suffix
 			} else {
 				pkt["preview"] = fmt.Sprintf("[binary %d bytes]", len(sd.Body))
 			}
@@ -155,6 +156,9 @@ func toolSocketDataGetHandler(args map[string]interface{}) (interface{}, error) 
 	h := ctx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
+	}
+	if len(h.SocketData) == 0 {
+		return nil, fmt.Errorf("请求 %d 没有数据包", theology)
 	}
 	if index < 0 || index >= len(h.SocketData) {
 		return nil, fmt.Errorf("索引 %d 超出范围 (0-%d)", index, len(h.SocketData)-1)
@@ -289,24 +293,10 @@ func toolConnectionListHandler(args map[string]interface{}) (interface{}, error)
 		matchedKeys = append(matchedKeys, theology)
 	})
 
-	sort.Ints(matchedKeys)
-	for i, j := 0, len(matchedKeys)-1; i < j; i, j = i+1, j-1 {
-		matchedKeys[i], matchedKeys[j] = matchedKeys[j], matchedKeys[i]
-	}
-
-	totalMatched := len(matchedKeys)
-	start := offset
-	end := offset + limit
-	if start > len(matchedKeys) {
-		start = len(matchedKeys)
-	}
-	if end > len(matchedKeys) {
-		end = len(matchedKeys)
-	}
-	matchedKeys = matchedKeys[start:end]
+	paged, totalMatched := sortDescAndPaginate(matchedKeys, offset, limit)
 
 	var connections []map[string]interface{}
-	for _, theology := range matchedKeys {
+	for _, theology := range paged {
 		h := hashMap.GetRequest(theology)
 		if h == nil {
 			continue

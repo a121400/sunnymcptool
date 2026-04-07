@@ -12,14 +12,15 @@ import (
 
 // MCPServer MCP服务器结构体
 type MCPServer struct {
-	httpServer  *http.Server
-	port        int
-	running     bool
-	mu          sync.RWMutex
-	clients     map[string]chan []byte
-	clientsMu   sync.RWMutex
-	registry    *ToolRegistry
-	middlewares []MiddlewareFunc
+	httpServer   *http.Server
+	port         int
+	running      bool
+	mu           sync.RWMutex
+	clients      map[string]chan []byte
+	clientsMu    sync.RWMutex
+	registry     *ToolRegistry
+	middlewares  []MiddlewareFunc
+	handlerChain func(JSONRPCRequest) JSONRPCResponse
 }
 
 // JSON-RPC 2.0 请求结构
@@ -87,13 +88,15 @@ type MCPContent struct {
 
 // NewMCPServer 创建新的MCP服务器实例
 func NewMCPServer(port int) *MCPServer {
-	return &MCPServer{
+	s := &MCPServer{
 		port:        port,
 		running:     false,
 		clients:     make(map[string]chan []byte),
 		registry:    GlobalRegistry,
 		middlewares: make([]MiddlewareFunc, 0),
 	}
+	s.rebuildHandlerChain()
+	return s
 }
 
 // Use 注册中间件
@@ -101,6 +104,11 @@ func (m *MCPServer) Use(mw MiddlewareFunc) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.middlewares = append(m.middlewares, mw)
+	m.rebuildHandlerChain()
+}
+
+func (m *MCPServer) rebuildHandlerChain() {
+	m.handlerChain = ChainMiddlewares(m.middlewares, m.handleJSONRPC)
 }
 
 // ActiveClients 获取当前活跃SSE连接数
@@ -128,9 +136,9 @@ func (m *MCPServer) Start() error {
 	m.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", m.port),
 		Handler:      m.corsMiddleware(mux),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {
@@ -290,11 +298,9 @@ func (m *MCPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.mu.RLock()
-	middlewares := make([]MiddlewareFunc, len(m.middlewares))
-	copy(middlewares, m.middlewares)
+	handler := m.handlerChain
 	m.mu.RUnlock()
 
-	handler := ChainMiddlewares(middlewares, m.handleJSONRPC)
 	response := handler(request)
 
 	sessionId := r.URL.Query().Get("sessionId")

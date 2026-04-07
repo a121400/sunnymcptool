@@ -1,6 +1,10 @@
 package tools
 
-import "github.com/a121400/sunnymcptool/mcp"
+import (
+	"errors"
+
+	"github.com/a121400/sunnymcptool/mcp"
+)
 
 func init() {
 	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
@@ -12,7 +16,11 @@ func init() {
 }
 
 func toolConfigGetHandler(args map[string]interface{}) (interface{}, error) {
-	c := ctx().Config
+	appCtx := ctx()
+	if appCtx == nil || appCtx.Config == nil {
+		return nil, errors.New("应用上下文未初始化")
+	}
+	c := appCtx.Config
 	return map[string]interface{}{
 		"success":            true,
 		"port":               c.GetPort(),

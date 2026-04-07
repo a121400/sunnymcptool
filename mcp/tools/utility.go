@@ -1,39 +1,25 @@
 package tools
 
 import (
+	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"sort"
+	"io"
+	"strings"
+
+	"github.com/andybalholm/brotli"
 
 	"github.com/a121400/sunnymcptool/MapHash"
 	"github.com/a121400/sunnymcptool/mcp"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 func init() {
-	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
-		Name:        "request_clear",
-		Description: "清空全部已捕获的请求列表（保留活跃的长连接）",
-		InputSchema: noParamsSchema(),
-		Handler:     toolRequestClearHandler,
-	})
-
-	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
-		Name:        "request_delete",
-		Description: "删除指定的请求记录",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"theologies": map[string]interface{}{
-					"type":        "array",
-					"items":       map[string]interface{}{"type": "integer"},
-					"description": "要删除的请求ID列表",
-				},
-			},
-			"required": []string{"theologies"},
-		},
-		Handler: toolRequestDeleteHandler,
-	})
-
 	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
 		Name:        "request_resend",
 		Description: "重发指定的 HTTP 请求（当前仅支持 HTTP 协议）",
@@ -85,31 +71,28 @@ func init() {
 		},
 		Handler: toolRequestGetResponseBodyDecodedHandler,
 	})
-}
 
-func toolRequestClearHandler(args map[string]interface{}) (interface{}, error) {
-	ctx().HashMap.Empty()
-	return map[string]interface{}{
-		"success": true,
-		"message": "已清空请求列表（活跃长连接已保留）",
-	}, nil
-}
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "request_highlight_search",
+		Description: "搜索关键词并在UI中高亮匹配的请求行，方便定位",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"keyword": map[string]interface{}{"type": "string", "description": "搜索关键词"},
+				"type":    map[string]interface{}{"type": "string", "description": "搜索类型: UTF8/GBK/Hex，默认UTF8", "default": "UTF8"},
+				"color":   map[string]interface{}{"type": "string", "description": "高亮颜色，默认黄色", "default": "#FFFF00"},
+			},
+			"required": []string{"keyword"},
+		},
+		Handler: toolRequestHighlightSearchHandler,
+	})
 
-func toolRequestDeleteHandler(args map[string]interface{}) (interface{}, error) {
-	v := mcp.NewParamValidator(args)
-	theologies := v.RequireIntArray("theologies")
-	if err := v.Error(); err != nil {
-		return nil, err
-	}
-	if len(theologies) == 0 {
-		return nil, fmt.Errorf("请求ID列表不能为空")
-	}
-	ctx().HashMap.Delete(theologies)
-	return map[string]interface{}{
-		"success": true,
-		"deleted": len(theologies),
-		"message": fmt.Sprintf("已删除 %d 条请求", len(theologies)),
-	}, nil
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "request_highlight_clear",
+		Description: "清除所有搜索高亮标记",
+		InputSchema: noParamsSchema(),
+		Handler:     toolRequestHighlightClearHandler,
+	})
 }
 
 func toolRequestResendHandler(args map[string]interface{}) (interface{}, error) {
@@ -122,6 +105,9 @@ func toolRequestResendHandler(args map[string]interface{}) (interface{}, error) 
 		return nil, fmt.Errorf("请求ID列表不能为空")
 	}
 	c := ctx()
+	if c == nil || c.App == nil || c.HashMap == nil {
+		return nil, fmt.Errorf("应用上下文未初始化")
+	}
 	port := c.App.GetPort()
 	c.HashMap.Resend(theologies, 0, port)
 	return map[string]interface{}{
@@ -132,7 +118,11 @@ func toolRequestResendHandler(args map[string]interface{}) (interface{}, error) 
 }
 
 func toolRequestStatsHandler(args map[string]interface{}) (interface{}, error) {
-	hashMap := ctx().HashMap
+	c := ctx()
+	if c == nil || c.HashMap == nil {
+		return nil, fmt.Errorf("应用上下文未初始化")
+	}
+	hashMap := c.HashMap
 	total := 0
 	byProtocol := map[string]int{}
 	byStatus := map[string]int{}
@@ -182,7 +172,11 @@ func toolRequestBodySearchHandler(args map[string]interface{}) (interface{}, err
 		return nil, fmt.Errorf("搜索关键词不能为空")
 	}
 
-	hashMap := ctx().HashMap
+	c := ctx()
+	if c == nil || c.HashMap == nil {
+		return nil, fmt.Errorf("应用上下文未初始化")
+	}
+	hashMap := c.HashMap
 	var matchedKeys []int
 
 	hashMap.Search(func(theology int, _ int, req *MapHash.Request) {
@@ -190,7 +184,7 @@ func toolRequestBodySearchHandler(args map[string]interface{}) (interface{}, err
 			return
 		}
 		matched := false
-		if (scope == "all" || scope == "url") && contains(req.URL, keyword) {
+		if (scope == "all" || scope == "url") && containsStr(req.URL, keyword) {
 			matched = true
 		}
 		if !matched && (scope == "all" || scope == "request_body") && containsBytes(req.Body, keyword) {
@@ -204,18 +198,10 @@ func toolRequestBodySearchHandler(args map[string]interface{}) (interface{}, err
 		}
 	})
 
-	sort.Ints(matchedKeys)
-	for i, j := 0, len(matchedKeys)-1; i < j; i, j = i+1, j-1 {
-		matchedKeys[i], matchedKeys[j] = matchedKeys[j], matchedKeys[i]
-	}
-
-	totalMatched := len(matchedKeys)
-	if limit > 0 && len(matchedKeys) > limit {
-		matchedKeys = matchedKeys[:limit]
-	}
+	paged, totalMatched := sortDescAndPaginate(matchedKeys, 0, limit)
 
 	var results []map[string]interface{}
-	for _, theology := range matchedKeys {
+	for _, theology := range paged {
 		h := hashMap.GetRequest(theology)
 		if h == nil {
 			continue
@@ -252,6 +238,9 @@ func toolRequestGetResponseBodyDecodedHandler(args map[string]interface{}) (inte
 	}
 
 	body := h.Response.Body
+	contentType := getHeaderValue(h.Response.Header, "Content-Type")
+	contentEncoding := strings.ToLower(getHeaderValue(h.Response.Header, "Content-Encoding"))
+
 	result := map[string]interface{}{
 		"theology":   theology,
 		"statusCode": h.Response.StateCode,
@@ -261,48 +250,152 @@ func toolRequestGetResponseBodyDecodedHandler(args map[string]interface{}) (inte
 	if len(body) == 0 {
 		result["body"] = ""
 		result["encoding"] = "empty"
-	} else if isPrintable(body) {
-		result["body"] = string(body)
+		result["contentType"] = contentType
+		return result, nil
+	}
+
+	decoded := decompressBody(body, contentEncoding)
+	if contentEncoding != "" && len(decoded) != len(body) {
+		result["decompressed"] = true
+		result["decompressedLength"] = len(decoded)
+	}
+
+	decoded = convertCharset(decoded, contentType)
+
+	if isPrintable(decoded) {
+		text := string(decoded)
+		if looksLikeJSON(contentType, decoded) {
+			if pretty, err := prettyJSON(decoded); err == nil {
+				text = pretty
+				result["formatted"] = true
+			}
+		}
+		result["body"] = text
 		result["encoding"] = "text"
 	} else {
-		result["bodyBase64"] = base64.StdEncoding.EncodeToString(body)
+		result["bodyBase64"] = base64.StdEncoding.EncodeToString(decoded)
 		result["encoding"] = "base64"
 	}
 
-	contentType := ""
-	if h.Response.Header != nil {
-		ct := h.Response.Header["Content-Type"]
-		if len(ct) > 0 {
-			contentType = ct[0]
-		} else {
-			ct = h.Response.Header["content-type"]
-			if len(ct) > 0 {
-				contentType = ct[0]
-			}
-		}
-	}
 	result["contentType"] = contentType
-
 	return result, nil
 }
 
-func contains(s, substr string) bool {
-	return len(substr) > 0 && len(s) >= len(substr) &&
-		(s == substr || len(s) > 0 && containsLower(s, substr))
-}
-
-func containsLower(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
+func getHeaderValue(headers map[string][]string, key string) string {
+	if headers == nil {
+		return ""
+	}
+	if v := headers[key]; len(v) > 0 {
+		return v[0]
+	}
+	lk := strings.ToLower(key)
+	for k, v := range headers {
+		if strings.ToLower(k) == lk && len(v) > 0 {
+			return v[0]
 		}
 	}
-	return false
+	return ""
+}
+
+func decompressBody(data []byte, encoding string) []byte {
+	if len(data) == 0 {
+		return data
+	}
+	var reader io.Reader
+	switch encoding {
+	case "gzip":
+		r, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return data
+		}
+		defer r.Close()
+		reader = r
+	case "br":
+		reader = brotli.NewReader(bytes.NewReader(data))
+	case "deflate":
+		r := flate.NewReader(bytes.NewReader(data))
+		defer r.Close()
+		reader = r
+	default:
+		return data
+	}
+	out, err := io.ReadAll(reader)
+	if err != nil {
+		return data
+	}
+	return out
+}
+
+func convertCharset(data []byte, contentType string) []byte {
+	ct := strings.ToLower(contentType)
+	if strings.Contains(ct, "gbk") || strings.Contains(ct, "gb2312") || strings.Contains(ct, "gb18030") {
+		decoded, err := io.ReadAll(transform.NewReader(bytes.NewReader(data), simplifiedchinese.GBK.NewDecoder()))
+		if err == nil {
+			return decoded
+		}
+	}
+	return data
+}
+
+func looksLikeJSON(contentType string, data []byte) bool {
+	if strings.Contains(strings.ToLower(contentType), "json") {
+		return true
+	}
+	trimmed := bytes.TrimSpace(data)
+	return len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[')
+}
+
+func prettyJSON(data []byte) (string, error) {
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, data, "", "  "); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func toolRequestHighlightSearchHandler(args map[string]interface{}) (interface{}, error) {
+	v := mcp.NewParamValidator(args)
+	keyword := v.RequireString("keyword")
+	searchType := v.OptionalString("type", "UTF8")
+	color := v.OptionalString("color", "#FFFF00")
+	if err := v.Error(); err != nil {
+		return nil, err
+	}
+	if keyword == "" {
+		return nil, fmt.Errorf("搜索关键词不能为空")
+	}
+	c := ctx()
+	if c == nil || c.SearchFunc == nil {
+		return nil, fmt.Errorf("搜索功能未初始化")
+	}
+	result := c.SearchFunc(keyword, searchType, color)
+	return map[string]interface{}{
+		"success": true,
+		"keyword": keyword,
+		"type":    searchType,
+		"color":   color,
+		"result":  result,
+		"message": "搜索完成，匹配行已高亮",
+	}, nil
+}
+
+func toolRequestHighlightClearHandler(args map[string]interface{}) (interface{}, error) {
+	c := ctx()
+	if c == nil || c.CancelSearchFunc == nil {
+		return nil, fmt.Errorf("搜索功能未初始化")
+	}
+	cleared := c.CancelSearchFunc()
+	return map[string]interface{}{
+		"success": true,
+		"cleared": len(cleared),
+		"message": fmt.Sprintf("已清除 %d 条搜索高亮", len(cleared)),
+	}, nil
+}
+
+func containsStr(s, substr string) bool {
+	return len(substr) > 0 && strings.Contains(s, substr)
 }
 
 func containsBytes(data []byte, keyword string) bool {
-	if len(data) == 0 || len(keyword) == 0 {
-		return false
-	}
-	return containsLower(string(data), keyword)
+	return len(data) > 0 && len(keyword) > 0 && bytes.Contains(data, []byte(keyword))
 }

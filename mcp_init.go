@@ -67,6 +67,20 @@ func (a *proxyAppAdapter) DelProcessName(name string) {
 	}
 }
 
+func (a *proxyAppAdapter) SetIEProxy() bool {
+	if app != nil && app.App != nil {
+		return app.App.SetIEProxy()
+	}
+	return false
+}
+
+func (a *proxyAppAdapter) CancelIEProxy() bool {
+	if app != nil && app.App != nil {
+		return app.App.CancelIEProxy()
+	}
+	return false
+}
+
 // appConfigAdapter 将 GlobalConfig 适配为 mcp.AppConfig 接口
 type appConfigAdapter struct{}
 
@@ -224,6 +238,30 @@ func InitMCPContext() {
 		TmpLock:      &_TmpLock,
 		HostsRuleMgr: &hostsRuleManagerAdapter{},
 		DataIO:       &dataIOAdapter{},
+		SetCapturing: SetWorkingState,
+		GetCapturing: GetWorkingState,
+		SearchFunc: func(keyword, searchType, color string) interface{} {
+			fv := &FindValue{
+				Value:   keyword,
+				Type:    searchType,
+				Color:   color,
+				Range:   "全部",
+				Options: "取消之前的颜色标记",
+			}
+			result := fv.Find()
+			if sr, ok := result.(*SearchResult); ok && sr != nil {
+				CallJs("MCP搜索高亮", sr)
+			}
+			return result
+		},
+		CancelSearchFunc: func() []int {
+			cleared := CancelSearch()
+			CallJs("MCP取消搜索高亮", cleared)
+			return cleared
+		},
+		NotifyUI: func(event string, data interface{}) {
+			CallJs(event, data)
+		},
 	}
 }
 

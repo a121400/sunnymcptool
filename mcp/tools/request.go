@@ -1,10 +1,8 @@
 package tools
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/a121400/sunnymcptool/MapHash"
@@ -199,6 +197,30 @@ func init() {
 		},
 		Handler: toolRequestSearchHandler,
 	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "request_delete",
+		Description: "删除指定的请求记录",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"theologies": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "integer"},
+					"description": "要删除的请求ID列表",
+				},
+			},
+			"required": []string{"theologies"},
+		},
+		Handler: toolRequestDeleteHandler,
+	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "request_clear",
+		Description: "清空全部已捕获的请求列表（保留活跃的长连接）",
+		InputSchema: noParamsSchema(),
+		Handler:     toolRequestClearHandler,
+	})
 }
 
 func toolRequestListHandler(args map[string]interface{}) (interface{}, error) {
@@ -210,31 +232,20 @@ func toolRequestListHandler(args map[string]interface{}) (interface{}, error) {
 	}
 
 	hashMap := ctx().HashMap
-	var requests []RequestInfo
 	var keys []int
 
-	hashMap.Search(func(theology int, _ int, _ *MapHash.Request) {
-		keys = append(keys, theology)
+	hashMap.Search(func(theology int, _ int, req *MapHash.Request) {
+		if req != nil && req.Display {
+			keys = append(keys, theology)
+		}
 	})
 
-	sort.Ints(keys)
-	for i, j := 0, len(keys)-1; i < j; i, j = i+1, j-1 {
-		keys[i], keys[j] = keys[j], keys[i]
-	}
+	paged, total := sortDescAndPaginate(keys, offset, limit)
 
-	start := offset
-	end := offset + limit
-	if start > len(keys) {
-		start = len(keys)
-	}
-	if end > len(keys) {
-		end = len(keys)
-	}
-	keys = keys[start:end]
-
-	for _, theology := range keys {
+	requests := make([]RequestInfo, 0, len(paged))
+	for _, theology := range paged {
 		h := hashMap.GetRequest(theology)
-		if h != nil && h.Display {
+		if h != nil {
 			requests = append(requests, RequestInfo{
 				Theology: theology, Method: h.Method, URL: h.URL,
 				StatusCode: h.Response.StateCode, ClientIP: h.ClientIP,
@@ -245,7 +256,7 @@ func toolRequestListHandler(args map[string]interface{}) (interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"success": true, "total": len(keys), "offset": offset, "limit": limit, "requests": requests,
+		"success": true, "total": total, "offset": offset, "limit": limit, "requests": requests,
 	}, nil
 }
 
@@ -261,18 +272,18 @@ func toolRequestGetHandler(args map[string]interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
 
+	const maxBodySize = 256 * 1024
+
 	detail := RequestDetail{
 		Theology: theology, Method: h.Method, URL: h.URL, Proto: h.Proto,
 		ClientIP: h.ClientIP, PID: h.PID, SendTime: h.SendTime, RecTime: h.RecTime,
 		Way: h.Way, Notes: h.Notes,
 	}
 	detail.Request.Headers = h.Header
-	detail.Request.Body = string(h.Body)
-	detail.Request.BodyB64 = base64.StdEncoding.EncodeToString(h.Body)
+	detail.Request.Body, detail.Request.BodyB64 = encodeBody(h.Body, maxBodySize)
 	detail.Response.StatusCode = h.Response.StateCode
 	detail.Response.Headers = h.Response.Header
-	detail.Response.Body = string(h.Response.Body)
-	detail.Response.BodyB64 = base64.StdEncoding.EncodeToString(h.Response.Body)
+	detail.Response.Body, detail.Response.BodyB64 = encodeBody(h.Response.Body, maxBodySize)
 	detail.Response.Error = h.Response.Error
 
 	return detail, nil
@@ -404,7 +415,11 @@ func toolRequestBlockHandler(args map[string]interface{}) (interface{}, error) {
 }
 
 func toolRequestReleaseAllHandler(args map[string]interface{}) (interface{}, error) {
-	ctx().HashMap.ReleaseAll()
+	c := ctx()
+	if c == nil || c.HashMap == nil {
+		return nil, fmt.Errorf("应用上下文未初始化")
+	}
+	c.HashMap.ReleaseAll()
 	return map[string]interface{}{
 		"success": true, "message": "所有请求已放行",
 	}, nil
@@ -441,24 +456,10 @@ func toolRequestSearchHandler(args map[string]interface{}) (interface{}, error) 
 		matchedKeys = append(matchedKeys, theology)
 	})
 
-	sort.Ints(matchedKeys)
-	for i, j := 0, len(matchedKeys)-1; i < j; i, j = i+1, j-1 {
-		matchedKeys[i], matchedKeys[j] = matchedKeys[j], matchedKeys[i]
-	}
-
-	totalMatched := len(matchedKeys)
-	start := offset
-	end := offset + limit
-	if start > len(matchedKeys) {
-		start = len(matchedKeys)
-	}
-	if end > len(matchedKeys) {
-		end = len(matchedKeys)
-	}
-	matchedKeys = matchedKeys[start:end]
+	paged, totalMatched := sortDescAndPaginate(matchedKeys, offset, limit)
 
 	var requests []RequestInfo
-	for _, theology := range matchedKeys {
+	for _, theology := range paged {
 		h := hashMap.GetRequest(theology)
 		if h != nil {
 			requests = append(requests, RequestInfo{
@@ -517,5 +518,42 @@ func toolRequestImportHandler(args map[string]interface{}) (interface{}, error) 
 	}
 	return map[string]interface{}{
 		"success": true, "path": path, "imported": count, "message": fmt.Sprintf("已导入 %d 条记录", count),
+	}, nil
+}
+
+func toolRequestDeleteHandler(args map[string]interface{}) (interface{}, error) {
+	v := mcp.NewParamValidator(args)
+	theologies := v.RequireIntArray("theologies")
+	if err := v.Error(); err != nil {
+		return nil, err
+	}
+	if len(theologies) == 0 {
+		return nil, errors.New("请求ID列表不能为空")
+	}
+	c := ctx()
+	if c == nil || c.HashMap == nil {
+		return nil, errors.New("应用上下文未初始化")
+	}
+	c.HashMap.Delete(theologies)
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP删除请求", theologies)
+	}
+	return map[string]interface{}{
+		"success": true, "count": len(theologies),
+		"message": fmt.Sprintf("已删除 %d 条请求记录", len(theologies)),
+	}, nil
+}
+
+func toolRequestClearHandler(args map[string]interface{}) (interface{}, error) {
+	c := ctx()
+	if c == nil || c.HashMap == nil {
+		return nil, errors.New("应用上下文未初始化")
+	}
+	c.HashMap.Empty()
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP清空请求", nil)
+	}
+	return map[string]interface{}{
+		"success": true, "message": "已清空全部请求列表",
 	}, nil
 }

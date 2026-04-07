@@ -115,8 +115,8 @@ export default {
         {
           field: "序号", tooltipField: '序号',
           minWidth: 80,
-          width: 80,
-          maxWidth: 100,
+          width: 90,
+          maxWidth: 120,
           sortable: true,
           menuTabs: [], // 不显示过滤器
           cellRenderer: 'imageRenderer', cellStyle: {'text-align': 'left'},

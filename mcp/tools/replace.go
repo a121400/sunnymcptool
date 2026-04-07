@@ -11,7 +11,7 @@ import (
 func init() {
 	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
 		Name:        "replace_rules_list",
-		Description: "列出当前所有替换规则",
+		Description: "列出当前所有替换规则，返回每条规则的源地址、目标地址和唯一标识",
 		InputSchema: noParamsSchema(),
 		Handler:     toolReplaceRulesListHandler,
 	})
@@ -26,6 +26,7 @@ func init() {
 					"type":        "string",
 					"description": "替换类型：Base64、HEX、String(UTF8)、String(GBK)、响应文件",
 					"enum":        []string{"Base64", "HEX", "String(UTF8)", "String(GBK)", "响应文件"},
+					"default":     "String(UTF8)",
 				},
 				"source": map[string]interface{}{
 					"type":        "string",
@@ -34,9 +35,10 @@ func init() {
 				"target": map[string]interface{}{
 					"type":        "string",
 					"description": "替换内容（替换为的内容，响应文件类型时为文件路径）",
+					"default":     "",
 				},
 			},
-			"required": []string{"type", "source", "target"},
+			"required": []string{"source"},
 		},
 		Handler: toolReplaceRulesAddHandler,
 	})
@@ -51,8 +53,11 @@ func init() {
 					"type":        "string",
 					"description": "规则的唯一标识Hash",
 				},
+				"index": map[string]interface{}{
+					"type":        "integer",
+					"description": "规则索引（从0开始，通过breakpoint_list获取）",
+				},
 			},
-			"required": []string{"hash"},
 		},
 		Handler: toolReplaceRulesRemoveHandler,
 	})
@@ -70,32 +75,37 @@ func toolReplaceRulesListHandler(args map[string]interface{}) (interface{}, erro
 	if rules == nil {
 		rules = []mcp.ConfigReplaceRule{}
 	}
+	items := make([]map[string]interface{}, len(rules))
+	for i, r := range rules {
+		items[i] = map[string]interface{}{
+			"index": i,
+			"type":  r.Type,
+			"src":   r.Src,
+			"dest":  r.Dest,
+			"hash":  r.Hash,
+		}
+	}
 	return map[string]interface{}{
 		"success": true,
-		"rules":   rules,
+		"rules":   items,
 		"total":   len(rules),
 	}, nil
 }
 
 func toolReplaceRulesAddHandler(args map[string]interface{}) (interface{}, error) {
 	v := mcp.NewParamValidator(args)
-	ruleType := v.RequireString("type")
 	source := v.RequireString("source")
+	ruleType := v.OptionalString("type", "String(UTF8)")
 	target := v.OptionalString("target", "")
 	if err := v.Error(); err != nil {
 		return nil, err
 	}
 
-	validTypes := []string{"Base64", "HEX", "String(UTF8)", "String(GBK)", "响应文件"}
-	isValidType := false
-	for _, t := range validTypes {
-		if t == ruleType {
-			isValidType = true
-			break
-		}
+	validTypes := map[string]bool{
+		"Base64": true, "HEX": true, "String(UTF8)": true, "String(GBK)": true, "响应文件": true,
 	}
-	if !isValidType {
-		return nil, fmt.Errorf("无效的替换类型: %s，支持的类型: %v", ruleType, validTypes)
+	if !validTypes[ruleType] {
+		return nil, fmt.Errorf("无效的替换类型: %s，支持: Base64, HEX, String(UTF8), String(GBK), 响应文件", ruleType)
 	}
 	if source == "" {
 		return nil, errors.New("源内容不能为空")
@@ -117,21 +127,26 @@ func toolReplaceRulesAddHandler(args map[string]interface{}) (interface{}, error
 	_ = c.Config.Save()
 	c.TmpLock.Unlock()
 
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "add"})
+	}
 	return map[string]interface{}{
 		"success": true,
 		"rule":    rule,
+		"index":   len(rules) - 1,
 		"message": "替换规则已添加",
 	}, nil
 }
 
 func toolReplaceRulesRemoveHandler(args map[string]interface{}) (interface{}, error) {
 	v := mcp.NewParamValidator(args)
-	hash := v.RequireString("hash")
+	hash := v.OptionalString("hash", "")
+	index := v.OptionalInt("index", -1)
 	if err := v.Error(); err != nil {
 		return nil, err
 	}
-	if hash == "" {
-		return nil, errors.New("hash不能为空")
+	if hash == "" && index < 0 {
+		return nil, errors.New("请提供 hash 或 index 参数之一")
 	}
 
 	c := ctx()
@@ -139,6 +154,25 @@ func toolReplaceRulesRemoveHandler(args map[string]interface{}) (interface{}, er
 	defer c.TmpLock.Unlock()
 
 	rules := c.Config.GetReplaceRules()
+
+	if index >= 0 {
+		if index >= len(rules) {
+			return nil, fmt.Errorf("索引 %d 超出范围（共 %d 条规则）", index, len(rules))
+		}
+		newRules := make([]mcp.ConfigReplaceRule, 0, len(rules)-1)
+		newRules = append(newRules, rules[:index]...)
+		newRules = append(newRules, rules[index+1:]...)
+		c.Config.SetReplaceRules(newRules)
+		_ = c.Config.Save()
+		if c.NotifyUI != nil {
+			c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "remove"})
+		}
+		return map[string]interface{}{
+			"success": true,
+			"message": fmt.Sprintf("已删除索引 %d 的替换规则", index),
+		}, nil
+	}
+
 	found := false
 	newRules := make([]mcp.ConfigReplaceRule, 0)
 	for _, rule := range rules {
@@ -153,6 +187,9 @@ func toolReplaceRulesRemoveHandler(args map[string]interface{}) (interface{}, er
 	}
 	c.Config.SetReplaceRules(newRules)
 	_ = c.Config.Save()
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "remove"})
+	}
 
 	return map[string]interface{}{
 		"success": true,
@@ -169,6 +206,9 @@ func toolReplaceRulesClearHandler(args map[string]interface{}) (interface{}, err
 	c.Config.SetReplaceRules([]mcp.ConfigReplaceRule{})
 	_ = c.Config.Save()
 
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP替换规则变更", map[string]interface{}{"action": "clear"})
+	}
 	return map[string]interface{}{
 		"success": true,
 		"cleared": count,

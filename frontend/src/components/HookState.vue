@@ -23,6 +23,10 @@ export default {
   }, methods: {
     ClickEve() {
       this.state = !this.state
+      this.syncUI()
+      CallGoDo("工作状态", {State: this.state})
+    },
+    syncUI() {
       this.img = GetImage(this.state ? "开始捕获" : "停止捕获")
       this.Title = this.state ? "正在捕获" : "隐藏捕获"
       if (this.state) {
@@ -32,8 +36,14 @@ export default {
         document.getElementById("HookMessageText").innerText = "您隐藏了捕获数据"
         window.isHideHook = true;
       }
-      CallGoDo("工作状态", {State: this.state})
+    },
+    setState(val) {
+      this.state = val
+      this.syncUI()
     }
+  },
+  mounted() {
+    window.vm.HookState = this
   }
 }
 </script>

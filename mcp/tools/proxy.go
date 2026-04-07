@@ -46,6 +46,34 @@ func init() {
 		InputSchema: noParamsSchema(),
 		Handler:     toolProxyGetStatusHandler,
 	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "proxy_set_ie",
+		Description: "设置系统IE代理（将流量导入SunnyNet）",
+		InputSchema: noParamsSchema(),
+		Handler:     toolProxySetIEHandler,
+	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "proxy_unset_ie",
+		Description: "取消系统IE代理",
+		InputSchema: noParamsSchema(),
+		Handler:     toolProxyUnsetIEHandler,
+	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "proxy_pause_capture",
+		Description: "暂停捕获（停止记录新的请求）",
+		InputSchema: noParamsSchema(),
+		Handler:     toolProxyPauseCaptureHandler,
+	})
+
+	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
+		Name:        "proxy_resume_capture",
+		Description: "恢复捕获（继续记录新的请求）",
+		InputSchema: noParamsSchema(),
+		Handler:     toolProxyResumeCaptureHandler,
+	})
 }
 
 func toolProxyStartHandler(args map[string]interface{}) (interface{}, error) {
@@ -97,6 +125,9 @@ func toolProxySetPortHandler(args map[string]interface{}) (interface{}, error) {
 	}
 	c.Config.SetPort(port)
 	_ = c.Config.Save()
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP修改端口", map[string]interface{}{"port": port})
+	}
 	return map[string]interface{}{
 		"success": true,
 		"port":    port,
@@ -106,7 +137,13 @@ func toolProxySetPortHandler(args map[string]interface{}) (interface{}, error) {
 
 func toolProxyGetStatusHandler(args map[string]interface{}) (interface{}, error) {
 	c := ctx()
-	if c == nil || c.App == nil {
+	if c == nil {
+		return map[string]interface{}{
+			"running": false,
+			"error":   "应用上下文未初始化",
+		}, nil
+	}
+	if c.App == nil {
 		return map[string]interface{}{
 			"running":        false,
 			"port":           c.Config.GetPort(),
@@ -122,6 +159,10 @@ func toolProxyGetStatusHandler(args map[string]interface{}) (interface{}, error)
 	if appErr != nil {
 		errStr = appErr.Error()
 	}
+	capturing := true
+	if c.GetCapturing != nil {
+		capturing = c.GetCapturing()
+	}
 	return map[string]interface{}{
 		"running":        errStr == "",
 		"port":           c.App.GetPort(),
@@ -131,5 +172,80 @@ func toolProxyGetStatusHandler(args map[string]interface{}) (interface{}, error)
 		"disableCache":   c.Config.GetDisableCache(),
 		"authentication": c.Config.GetAuthentication(),
 		"globalProxy":    c.Config.GetGlobalProxy(),
+		"capturing":      capturing,
+	}, nil
+}
+
+func toolProxySetIEHandler(args map[string]interface{}) (interface{}, error) {
+	c := ctx()
+	if c == nil || c.App == nil {
+		return nil, errors.New("SunnyNet实例未初始化")
+	}
+	ok := c.App.SetIEProxy()
+	if !ok {
+		return nil, errors.New("设置IE代理失败")
+	}
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP设置IE代理状态", map[string]interface{}{"state": true})
+	}
+	return map[string]interface{}{
+		"success": true,
+		"message": "已设置系统IE代理",
+	}, nil
+}
+
+func toolProxyUnsetIEHandler(args map[string]interface{}) (interface{}, error) {
+	c := ctx()
+	if c == nil || c.App == nil {
+		return nil, errors.New("SunnyNet实例未初始化")
+	}
+	ok := c.App.CancelIEProxy()
+	if !ok {
+		return nil, errors.New("取消IE代理失败")
+	}
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP设置IE代理状态", map[string]interface{}{"state": false})
+	}
+	return map[string]interface{}{
+		"success": true,
+		"message": "已取消系统IE代理",
+	}, nil
+}
+
+func toolProxyPauseCaptureHandler(args map[string]interface{}) (interface{}, error) {
+	c := ctx()
+	if c == nil {
+		return nil, errors.New("应用上下文未初始化")
+	}
+	if c.SetCapturing == nil {
+		return nil, errors.New("捕获控制未初始化")
+	}
+	c.SetCapturing(false)
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP设置捕获状态", map[string]interface{}{"state": false})
+	}
+	return map[string]interface{}{
+		"success":   true,
+		"capturing": false,
+		"message":   "已暂停捕获",
+	}, nil
+}
+
+func toolProxyResumeCaptureHandler(args map[string]interface{}) (interface{}, error) {
+	c := ctx()
+	if c == nil {
+		return nil, errors.New("应用上下文未初始化")
+	}
+	if c.SetCapturing == nil {
+		return nil, errors.New("捕获控制未初始化")
+	}
+	c.SetCapturing(true)
+	if c.NotifyUI != nil {
+		c.NotifyUI("MCP设置捕获状态", map[string]interface{}{"state": true})
+	}
+	return map[string]interface{}{
+		"success":   true,
+		"capturing": true,
+		"message":   "已恢复捕获",
 	}, nil
 }
