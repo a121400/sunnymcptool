@@ -3,7 +3,7 @@
       ref="container"
       class="monaco-editor"
       style="text-align: left;height: 100%;"
-      :drak="getTheme"
+      :data-theme="getTheme"
   ></div>
 </template>
 <script>
@@ -75,12 +75,17 @@ export default {
   mounted() {
     this.init()
   },
+  beforeUnmount() {
+    if (this._editor) {
+      this._editor.dispose()
+      this._editor = null
+    }
+  },
   methods: {
     init() {
-      // 初始化container的内容，销毁之前生成的编辑器
       this.$refs.container.innerHTML = ''
-      // 生成 diff-editor 对象
       const editor = monaco.editor.create(this.$refs.container, this.defaultOpts)
+      this._editor = editor
 
       const model = editor.getModel()
       monaco.editor.setModelLanguage(model, "plaintext")
@@ -119,7 +124,8 @@ export default {
         //注册一个F1快捷键，但是什么也不做，用来阻止弹出命令列表
       });
 
-      editor.onContextMenu(() => {
+      editor.onContextMenu((e) => {
+        const browserEvent = e.event.browserEvent || e.event;
         this.$nextTick(() => {
           const asbb = document.querySelectorAll(".shadow-root-host")
           for (let i = 0; i < asbb.length; i++) {
@@ -155,8 +161,8 @@ export default {
                 }
                 const menu = as.shadowRoot.querySelectorAll(".monaco-menu-container")[0]
                 if (menu) {
-                  let mouseX = event.clientX + window.scrollX;
-                  let mouseY = event.clientY + window.scrollY;
+                  let mouseX = (browserEvent.clientX || 0) + window.scrollX;
+                  let mouseY = (browserEvent.clientY || 0) + window.scrollY;
                   if (mouseY + menu.offsetHeight > window.innerHeight) {
                     mouseY = window.innerHeight - menu.offsetHeight
                   }

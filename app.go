@@ -1,13 +1,15 @@
 package main
 
 import (
-	"github.com/a121400/sunnymcptool/CommAnd"
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
+
+	"github.com/a121400/sunnymcptool/CommAnd"
 	"github.com/qtgolang/SunnyNet/SunnyNet"
 	"github.com/qtgolang/SunnyNet/src/protobuf/JSON"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"strconv"
 )
 
 // App struct
@@ -34,10 +36,13 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) Do(arg any) any {
 	defer func() {
-		recover()
+		if r := recover(); r != nil {
+			fmt.Printf("[Do] panic recovered: %v\n", r)
+		}
 	}()
-	as := arg.(map[string]any)
-	if as == nil {
+	as, ok := arg.(map[string]any)
+	if !ok || as == nil {
+		fmt.Printf("[Do] invalid arg type: %T\n", arg)
 		return nil
 	}
 	_t := as["Command"]

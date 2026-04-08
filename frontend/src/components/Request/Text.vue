@@ -74,12 +74,17 @@ export default {
   mounted() {
     this.init()
   },
+  beforeUnmount() {
+    if (this._editor) {
+      this._editor.dispose()
+      this._editor = null
+    }
+  },
   methods: {
     init() {
-      // 初始化container的内容，销毁之前生成的编辑器
       this.$refs.container.innerHTML = ''
-      // 生成 diff-editor 对象
       const editor = monaco.editor.create(this.$refs.container, this.defaultOpts)
+      this._editor = editor
 
       const model = editor.getModel()
       monaco.editor.setModelLanguage(model, "plaintext")
