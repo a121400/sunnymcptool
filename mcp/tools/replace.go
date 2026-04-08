@@ -55,7 +55,7 @@ func init() {
 				},
 				"index": map[string]interface{}{
 					"type":        "integer",
-					"description": "规则索引（从0开始，通过breakpoint_list获取）",
+					"description": "规则索引（从0开始，通过replace_rules_list获取）",
 				},
 			},
 		},

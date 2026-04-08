@@ -461,7 +461,7 @@ func toolRequestSearchHandler(args map[string]interface{}) (interface{}, error) 
 		if methodFilter != "" && req.Method != methodFilter {
 			return
 		}
-		if hasStatusCode && statusCodeFilter != 0 && req.Response.StateCode != statusCodeFilter {
+		if hasStatusCode && req.Response.StateCode != statusCodeFilter {
 			return
 		}
 		matchedKeys = append(matchedKeys, theology)

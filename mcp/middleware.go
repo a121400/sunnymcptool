@@ -63,6 +63,13 @@ func RateLimitMiddleware(maxRequests int, window time.Duration) MiddlewareFunc {
 		mu.Lock()
 
 		now := time.Now()
+
+		for k, e := range entries {
+			if now.After(e.resetTime) {
+				delete(entries, k)
+			}
+		}
+
 		entry, exists := entries[key]
 
 		if !exists || now.After(entry.resetTime) {

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type MCPServer struct {
 	registry     *ToolRegistry
 	middlewares  []MiddlewareFunc
 	handlerChain func(JSONRPCRequest) JSONRPCResponse
+	clientSeq    atomic.Int64
 }
 
 type sseClient struct {
@@ -248,7 +250,7 @@ func (m *MCPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientID := fmt.Sprintf("%d", time.Now().UnixNano())
+	clientID := fmt.Sprintf("sse-%d", m.clientSeq.Add(1))
 	sc := &sseClient{ch: make(chan []byte, 100)}
 
 	m.clientsMu.Lock()

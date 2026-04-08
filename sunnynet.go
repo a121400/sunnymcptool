@@ -92,7 +92,6 @@ type UpdateICO struct {
 func init() {
 	go InsertList()
 	go UpdateResponseLength()
-	GlobalConfig.LoadLocalFile()
 }
 
 var Insert sync.Mutex
