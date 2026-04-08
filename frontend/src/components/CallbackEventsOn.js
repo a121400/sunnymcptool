@@ -849,12 +849,16 @@ window.interface = {
     }
 }
 let isExecuting = false;
-setInterval(() => {
-    if (!isExecuting) {
+let refreshTimer = null;
+function scheduleRefresh() {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        if (isExecuting) { scheduleRefresh(); return; }
         isExecuting = true;
         try {
             if (window.vm.List && IsRefreshList) {
-                window.vm.List.agGridApi.applyTransaction({add: []});
+                window.vm.List.agGridApi.refreshCells({force: true});
                 IsRefreshList = false
             }
             if (window.vm.List && IsRefreshRenderedNodes) {
@@ -864,54 +868,40 @@ setInterval(() => {
         } finally {
             isExecuting = false;
         }
+    }, 200)
+}
+setInterval(() => {
+    if (IsRefreshList || IsRefreshRenderedNodes) {
+        scheduleRefresh();
     }
 }, 200)
 
+const _methodColorMap = [["TCP", "tcp"], ["UDP", "udp"], ["WEBSOCKET", "ws"]]
+const _typeColorMap = [["CSS", "css"], ["JAVASCRIPT", "js"], ["IMAGE", "img"], ["TEXT/", "document"]]
+const _stateColorMap = {"-1": "_1", "301": "_301", "302": "_302", "401": "_401", "403": "_403", "404": "_404", "500": "_500"}
+
 export function SetTextColor(obj) {
-    if (obj) {
-        if (obj.color === null || obj.color === void 0) {
-            obj.color = {}
+    if (!obj) return
+    if (obj.color == null) obj.color = {}
+    const Method = (obj.方式 || "").toUpperCase()
+    const Type = (obj.响应类型 || "").toUpperCase()
+    const State = (obj.状态 || "").toUpperCase()
+
+    for (const [key, cfg] of _methodColorMap) {
+        if (Method.indexOf(key) !== -1) {
+            obj.color.text = window.interface.colorConfig[cfg]
+            break
         }
-        const Method = (obj.方式 || "").toUpperCase()
-        const Type = (obj.响应类型 || "").toUpperCase()
-        const State = (obj.状态 || "").toUpperCase()
-        if (Method.indexOf("TCP") !== -1) {
-            obj.color.text = window.interface.colorConfig.tcp
-        } else if (Method.indexOf("UDP") !== -1) {
-            obj.color.text = window.interface.colorConfig.udp
-        } else if (Method.indexOf("WEBSOCKET") !== -1) {
-            obj.color.text = window.interface.colorConfig.ws
-        } else if (Method.indexOf("POST") !== -1) {
-
+    }
+    for (const [key, cfg] of _typeColorMap) {
+        if (Type.indexOf(key) !== -1) {
+            obj.color.text = window.interface.colorConfig[cfg]
+            break
         }
-        if (Type.indexOf("CSS") !== -1) {
-            obj.color.text = window.interface.colorConfig.css
-        } else if (Type.indexOf("JAVASCRIPT") !== -1) {
-            obj.color.text = window.interface.colorConfig.js
-        } else if (Type.indexOf("IMAGE") !== -1) {
-            obj.color.text = window.interface.colorConfig.img
-        } else if (Type.indexOf("TEXT/") !== -1) {
-            obj.color.text = window.interface.colorConfig.document
-        }
-
-
-        if (State === "-1") {
-            obj.color.text = window.interface.colorConfig._1
-        } else if (State === "301") {
-            obj.color.text = window.interface.colorConfig._301
-        } else if (State === "302") {
-            obj.color.text = window.interface.colorConfig._302
-        } else if (State === "401") {
-            obj.color.text = window.interface.colorConfig._401
-        } else if (State === "403") {
-            obj.color.text = window.interface.colorConfig._403
-        } else if (State === "404") {
-            obj.color.text = window.interface.colorConfig._404
-        } else if (State === "500") {
-            obj.color.text = window.interface.colorConfig._500
-        }
-
-
+    }
+    const stateCfg = _stateColorMap[State]
+    if (stateCfg) {
+        obj.color.text = window.interface.colorConfig[stateCfg]
     }
 }
 

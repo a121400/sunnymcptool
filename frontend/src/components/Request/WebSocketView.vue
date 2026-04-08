@@ -16,20 +16,23 @@
       <span>发送: {{ statsSend }} ({{ formatBytes(statsSendBytes) }})</span>
       <span>接收: {{ statsRecv }} ({{ formatBytes(statsRecvBytes) }})</span>
     </div>
-    <!-- 聊天视图 -->
-    <div class="ws-chat-container" v-if="chatMode" ref="chatContainer">
+    <!-- 聊天视图 (虚拟滚动) -->
+    <div class="ws-chat-container" v-if="chatMode" ref="chatContainer" @scroll="onChatScroll">
       <div v-if="filteredMessages.length === 0" class="ws-empty">暂无发送、接收的数据</div>
-      <div v-for="(msg, idx) in filteredMessages" :key="msg['#']"
-           :class="['ws-bubble-row', isSend(msg) ? 'ws-send' : 'ws-recv', selectedIdx === idx ? 'ws-selected' : '']"
-           @click="selectMessage(idx, msg)">
-        <div class="ws-bubble">
-          <div class="ws-bubble-header">
-            <span class="ws-dir-tag">{{ isSend(msg) ? 'SEND' : 'RECV' }}</span>
-            <span class="ws-type-tag" v-if="msg['类型']">[{{ msg['类型'] }}]</span>
-            <span class="ws-len">{{ msg['长度'] }} 字节</span>
-            <span class="ws-time">{{ msg['时间'] }}</span>
+      <div v-else :style="{height: filteredMessages.length * itemHeight + 'px', position: 'relative'}">
+        <div v-for="(msg, vi) in visibleMessages" :key="msg._key"
+             :style="{position: 'absolute', top: msg._top + 'px', left: 0, right: 0}"
+             :class="['ws-bubble-row', isSend(msg) ? 'ws-send' : 'ws-recv', selectedIdx === msg._idx ? 'ws-selected' : '']"
+             @click="selectMessage(msg._idx, msg)">
+          <div class="ws-bubble">
+            <div class="ws-bubble-header">
+              <span class="ws-dir-tag">{{ isSend(msg) ? 'SEND' : 'RECV' }}</span>
+              <span class="ws-type-tag" v-if="msg['类型']">[{{ msg['类型'] }}]</span>
+              <span class="ws-len">{{ msg['长度'] }} 字节</span>
+              <span class="ws-time">{{ msg['时间'] }}</span>
+            </div>
+            <div class="ws-bubble-body">{{ truncate(msg['数据'], 200) }}</div>
           </div>
-          <div class="ws-bubble-body">{{ truncate(msg['数据'], 200) }}</div>
         </div>
       </div>
     </div>
@@ -97,6 +100,19 @@ export default {
       }
       return msgs
     },
+    visibleMessages() {
+      const msgs = this.filteredMessages
+      const buffer = 5
+      const startIdx = Math.max(0, Math.floor(this.scrollTop / this.itemHeight) - buffer)
+      const visibleCount = Math.ceil(this.containerHeight / this.itemHeight) + buffer * 2
+      const endIdx = Math.min(msgs.length, startIdx + visibleCount)
+      const result = []
+      for (let i = startIdx; i < endIdx; i++) {
+        const m = msgs[i]
+        result.push({...m, _idx: i, _top: i * this.itemHeight, _key: m['#'] + '-' + i})
+      }
+      return result
+    },
     statsTotal() { return this.allMessages.length },
     statsSend() { return this.allMessages.filter(m => isSendIco(m.ico)).length },
     statsRecv() { return this.allMessages.filter(m => !isSendIco(m.ico)).length },
@@ -146,6 +162,9 @@ export default {
       searchKey: '',
       allMessages: [],
       selectedIdx: -1,
+      scrollTop: 0,
+      containerHeight: 400,
+      itemHeight: 60,
       _Width: 0,
       IsHasModify: false,
       agSelectedLine: null,
@@ -380,6 +399,12 @@ export default {
     }
   },
   methods: {
+    onChatScroll() {
+      if (this.$refs.chatContainer) {
+        this.scrollTop = this.$refs.chatContainer.scrollTop
+        this.containerHeight = this.$refs.chatContainer.clientHeight
+      }
+    },
     isSend(msg) {
       return isSendIco(msg.ico)
     },
@@ -413,11 +438,14 @@ export default {
       this.agGridApi.applyTransaction({add: objs});
       if (Array.isArray(objs)) {
         this.allMessages = this.allMessages.concat(objs)
-        this.$nextTick(() => {
-          if (this.chatMode && this.MenuItems[0].selected && this.$refs.chatContainer) {
-            this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight
-          }
-        })
+        if (this.chatMode && this.MenuItems[0].selected) {
+          this.$nextTick(() => {
+            if (this.$refs.chatContainer) {
+              this.$refs.chatContainer.scrollTop = this.filteredMessages.length * this.itemHeight
+              this.onChatScroll()
+            }
+          })
+        }
       }
     },
     RefreshRenderedNodes() {
@@ -511,6 +539,11 @@ export default {
   },
   mounted() {
     this.agGridApi = this.$refs.agGrid.gridOptions.api
+    this.$nextTick(() => {
+      if (this.$refs.chatContainer) {
+        this.containerHeight = this.$refs.chatContainer.clientHeight || 400
+      }
+    })
   }
 }
 </script>
