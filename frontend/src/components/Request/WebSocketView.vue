@@ -6,6 +6,7 @@
         <button :class="['ws-btn', dirFilter === 'all' ? 'ws-btn-active' : '']" @click="dirFilter='all'">全部</button>
         <button :class="['ws-btn', dirFilter === 'send' ? 'ws-btn-send' : '']" @click="dirFilter='send'">↑ 发送</button>
         <button :class="['ws-btn', dirFilter === 'recv' ? 'ws-btn-recv' : '']" @click="dirFilter='recv'">↓ 接收</button>
+        <button :class="['ws-btn', autoFollow ? 'ws-btn-active' : '']" @click="toggleFollow" title="自动跟随">⬇</button>
       </div>
       <input class="ws-search" v-model="searchKey" placeholder="搜索消息内容..." />
       <button class="ws-btn ws-btn-toggle" @click="chatMode=false" title="切换到列表视图">☰</button>
@@ -113,6 +114,7 @@ export default {
       }
       return result
     },
+    autoFollow() { return this.MenuItems[0].selected },
     statsTotal() { return this.allMessages.length },
     statsSend() { return this.allMessages.filter(m => isSendIco(m.ico)).length },
     statsRecv() { return this.allMessages.filter(m => !isSendIco(m.ico)).length },
@@ -399,6 +401,9 @@ export default {
     }
   },
   methods: {
+    toggleFollow() {
+      this.MenuItems[0].selected = !this.MenuItems[0].selected
+    },
     onChatScroll() {
       if (this.$refs.chatContainer) {
         this.scrollTop = this.$refs.chatContainer.scrollTop
@@ -419,19 +424,16 @@ export default {
     },
     selectMessage(idx, msg) {
       this.selectedIdx = idx
-      const rowNode = this.agGridApi.getRowNode(String(msg['#']))
-      if (!rowNode) {
-        const allNodes = []
-        this.agGridApi.forEachNode(n => {
-          if (n.data && n.data['#'] === msg['#']) allNodes.push(n)
-        })
-        if (allNodes.length > 0) {
-          allNodes[0].setSelected(true)
-          this.agSelectedLine = allNodes[0]
+      let found = false
+      this.agGridApi.forEachNode(n => {
+        if (!found && n.data && n.data['#'] === msg['#']) {
+          n.setSelected(true)
+          this.agSelectedLine = n
+          found = true
         }
-      } else {
-        rowNode.setSelected(true)
-        this.agSelectedLine = rowNode
+      })
+      if (!found) {
+        this.agSelectedLine = {data: msg, setSelected: () => {}}
       }
     },
     AddLines(objs) {
