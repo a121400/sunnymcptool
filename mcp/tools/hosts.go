@@ -55,7 +55,7 @@ func init() {
 }
 
 func toolHostsListHandler(args map[string]interface{}) (interface{}, error) {
-	c := ctx()
+	c := safeCtx()
 	c.TmpLock.Lock()
 	defer c.TmpLock.Unlock()
 
@@ -110,7 +110,7 @@ func toolHostsAddHandler(args map[string]interface{}) (interface{}, error) {
 	hash := fmt.Sprintf("%d", time.Now().UnixNano())
 	processedTarget := strings.ReplaceAll(target, "\\\\", "\\")
 
-	c := ctx()
+	c := safeCtx()
 	c.TmpLock.Lock()
 	defer c.TmpLock.Unlock()
 
@@ -153,7 +153,7 @@ func toolHostsRemoveHandler(args map[string]interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	c := ctx()
+	c := safeCtx()
 	c.TmpLock.Lock()
 	defer c.TmpLock.Unlock()
 

@@ -16,11 +16,16 @@ type MCPServer struct {
 	port         int
 	running      bool
 	mu           sync.RWMutex
-	clients      map[string]chan []byte
+	clients      map[string]*sseClient
 	clientsMu    sync.RWMutex
 	registry     *ToolRegistry
 	middlewares  []MiddlewareFunc
 	handlerChain func(JSONRPCRequest) JSONRPCResponse
+}
+
+type sseClient struct {
+	ch     chan []byte
+	closed bool
 }
 
 // JSON-RPC 2.0 请求结构
@@ -91,7 +96,7 @@ func NewMCPServer(port int) *MCPServer {
 	s := &MCPServer{
 		port:        port,
 		running:     false,
-		clients:     make(map[string]chan []byte),
+		clients:     make(map[string]*sseClient),
 		registry:    GlobalRegistry,
 		middlewares: make([]MiddlewareFunc, 0),
 	}
@@ -166,8 +171,11 @@ func (m *MCPServer) Stop() error {
 	}
 
 	m.clientsMu.Lock()
-	for id, ch := range m.clients {
-		close(ch)
+	for id, sc := range m.clients {
+		if !sc.closed {
+			sc.closed = true
+			close(sc.ch)
+		}
 		delete(m.clients, id)
 	}
 	m.clientsMu.Unlock()
@@ -241,16 +249,19 @@ func (m *MCPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clientID := fmt.Sprintf("%d", time.Now().UnixNano())
-	messageChan := make(chan []byte, 100)
+	sc := &sseClient{ch: make(chan []byte, 100)}
 
 	m.clientsMu.Lock()
-	m.clients[clientID] = messageChan
+	m.clients[clientID] = sc
 	m.clientsMu.Unlock()
 
 	defer func() {
 		m.clientsMu.Lock()
+		if !sc.closed {
+			sc.closed = true
+			close(sc.ch)
+		}
 		delete(m.clients, clientID)
-		close(messageChan)
 		m.clientsMu.Unlock()
 	}()
 
@@ -264,7 +275,7 @@ func (m *MCPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			return
-		case msg, ok := <-messageChan:
+		case msg, ok := <-sc.ch:
 			if !ok {
 				return
 			}
@@ -306,16 +317,19 @@ func (m *MCPServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	sessionId := r.URL.Query().Get("sessionId")
 	if sessionId != "" {
 		m.clientsMu.RLock()
-		ch, exists := m.clients[sessionId]
+		sc, exists := m.clients[sessionId]
 		m.clientsMu.RUnlock()
-		if exists {
+		if exists && !sc.closed {
 			respData, _ := json.Marshal(response)
-			select {
-			case ch <- respData:
-			default:
-				log.Printf("[警告] SSE消息通道已满，丢弃消息: sessionId=%s, method=%s\n",
-					sessionId, request.Method)
-			}
+			func() {
+				defer func() { recover() }()
+				select {
+				case sc.ch <- respData:
+				default:
+					log.Printf("[警告] SSE消息通道已满，丢弃消息: sessionId=%s, method=%s\n",
+						sessionId, request.Method)
+				}
+			}()
 		}
 	}
 
@@ -420,13 +434,14 @@ func (m *MCPServer) writeJSONRPCError(w http.ResponseWriter, id interface{}, cod
 // SendToClient 向指定客户端发送消息
 func (m *MCPServer) SendToClient(clientID string, message []byte) bool {
 	m.clientsMu.RLock()
-	ch, exists := m.clients[clientID]
+	sc, exists := m.clients[clientID]
 	m.clientsMu.RUnlock()
-	if !exists {
+	if !exists || sc.closed {
 		return false
 	}
+	defer func() { recover() }()
 	select {
-	case ch <- message:
+	case sc.ch <- message:
 		return true
 	default:
 		log.Printf("[警告] SSE消息通道已满，丢弃消息: clientId=%s\n", clientID)
@@ -438,11 +453,17 @@ func (m *MCPServer) SendToClient(clientID string, message []byte) bool {
 func (m *MCPServer) BroadcastToAll(message []byte) {
 	m.clientsMu.RLock()
 	defer m.clientsMu.RUnlock()
-	for clientID, ch := range m.clients {
-		select {
-		case ch <- message:
-		default:
-			log.Printf("[警告] SSE消息通道已满，丢弃消息: clientId=%s\n", clientID)
+	for clientID, sc := range m.clients {
+		if sc.closed {
+			continue
 		}
+		func() {
+			defer func() { recover() }()
+			select {
+			case sc.ch <- message:
+			default:
+				log.Printf("[警告] SSE消息通道已满，丢弃消息: clientId=%s\n", clientID)
+			}
+		}()
 	}
 }

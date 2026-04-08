@@ -79,7 +79,7 @@ func toolSocketDataListHandler(args map[string]interface{}) (interface{}, error)
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -153,7 +153,7 @@ func toolSocketDataGetHandler(args map[string]interface{}) (interface{}, error) 
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -204,7 +204,7 @@ func toolSocketDataGetRangeHandler(args map[string]interface{}) (interface{}, er
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -267,7 +267,7 @@ func toolConnectionListHandler(args map[string]interface{}) (interface{}, error)
 	}
 
 	protocolFilter = strings.ToLower(protocolFilter)
-	hashMap := ctx().HashMap
+	hashMap := safeCtx().HashMap
 	var matchedKeys []int
 
 	hashMap.Search(func(theology int, _ int, req *MapHash.Request) {

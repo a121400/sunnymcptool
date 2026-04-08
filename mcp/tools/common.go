@@ -13,6 +13,27 @@ func ctx() *mcp.AppContext {
 	return mcp.GlobalAppContext
 }
 
+var errCtxNil = fmt.Errorf("应用上下文未初始化")
+
+// requireCtx 返回上下文，若为 nil 则返回错误
+func requireCtx() (*mcp.AppContext, error) {
+	c := ctx()
+	if c == nil {
+		return nil, errCtxNil
+	}
+	return c, nil
+}
+
+// safeCtx 返回上下文，若为 nil 则 panic（由外层 recover 捕获）
+// 用于无法简洁修改返回值的内联调用
+func safeCtx() *mcp.AppContext {
+	c := ctx()
+	if c == nil {
+		panic(errCtxNil)
+	}
+	return c
+}
+
 // noParamsSchema 返回无参数的输入Schema
 func noParamsSchema() map[string]interface{} {
 	return map[string]interface{}{

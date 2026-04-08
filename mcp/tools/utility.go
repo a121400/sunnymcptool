@@ -232,7 +232,7 @@ func toolRequestGetResponseBodyDecodedHandler(args map[string]interface{}) (inte
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}

@@ -578,9 +578,13 @@ export default {
     },
     getMcpStatus() {
       CallGoDo("获取MCP状态", null).then(res => {
-        this.McpRunning = res.running
-        this.McpPort = res.port
-        this.McpError = res.error || ''
+        if (res) {
+          this.McpRunning = res.running
+          this.McpPort = res.port
+          this.McpError = res.error || ''
+        }
+      }).catch(err => {
+        console.error("获取MCP状态失败:", err)
       })
     },
     clickRemoveAll(mode) {
@@ -605,6 +609,7 @@ export default {
               window.vm.List.index = 0
             }
             const columnFilter = window.vm.List.agGridApi.getFilterInstance('响应长度');
+            if (!columnFilter) return
             columnFilter.setModel({
               type: 'notContains',
               filter: '0/0'
@@ -629,7 +634,7 @@ export default {
   },
   mounted() {
     try {
-      EventsOn("Do", (Request) => {
+      this._eventsOffDo = EventsOn("Do", (Request) => {
             EventsDo(Request)
           },
       )
@@ -642,6 +647,10 @@ export default {
 
     this.$nextTick(() => {
       CallGoDo("获取内网IP", null).then(res => {
+        if (!res || !Array.isArray(res)) {
+          this.WayContent = [{ip: "未获取到"}]
+          return
+        }
         const objs = []
         for (let i = 0; i < res.length; i++) {
           if (res[i].startsWith("169.")) {
@@ -656,9 +665,17 @@ export default {
           return
         }
         this.WayContent = objs
+      }).catch(err => {
+        console.error("获取内网IP失败:", err)
+        this.WayContent = [{ip: "获取失败"}]
       })
 
     })
+  },
+  beforeUnmount() {
+    if (this._eventsOffDo) {
+      this._eventsOffDo()
+    }
   }
 }
 </script>

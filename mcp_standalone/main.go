@@ -52,6 +52,9 @@ func main() {
 
 		var request map[string]interface{}
 		if err := json.Unmarshal([]byte(line), &request); err != nil {
+			errResp := errorResponse(nil, -32700, "解析错误", err.Error())
+			respBytes, _ := json.Marshal(errResp)
+			fmt.Println(string(respBytes))
 			continue
 		}
 
@@ -132,6 +135,11 @@ func forwardToMainProgram(id interface{}, request map[string]interface{}) (map[s
 		return nil, fmt.Errorf("无法连接到主程序: %v", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("主程序返回状态码 %d: %s", resp.StatusCode, string(body))
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

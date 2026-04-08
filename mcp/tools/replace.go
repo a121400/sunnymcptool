@@ -71,7 +71,11 @@ func init() {
 }
 
 func toolReplaceRulesListHandler(args map[string]interface{}) (interface{}, error) {
-	rules := ctx().Config.GetReplaceRules()
+	c, err := requireCtx()
+	if err != nil || c.Config == nil {
+		return nil, errCtxNil
+	}
+	rules := c.Config.GetReplaceRules()
 	if rules == nil {
 		rules = []mcp.ConfigReplaceRule{}
 	}
@@ -119,7 +123,7 @@ func toolReplaceRulesAddHandler(args map[string]interface{}) (interface{}, error
 		Hash: hash,
 	}
 
-	c := ctx()
+	c := safeCtx()
 	c.TmpLock.Lock()
 	rules := c.Config.GetReplaceRules()
 	rules = append(rules, rule)
@@ -149,7 +153,7 @@ func toolReplaceRulesRemoveHandler(args map[string]interface{}) (interface{}, er
 		return nil, errors.New("请提供 hash 或 index 参数之一")
 	}
 
-	c := ctx()
+	c := safeCtx()
 	c.TmpLock.Lock()
 	defer c.TmpLock.Unlock()
 
@@ -198,7 +202,7 @@ func toolReplaceRulesRemoveHandler(args map[string]interface{}) (interface{}, er
 }
 
 func toolReplaceRulesClearHandler(args map[string]interface{}) (interface{}, error) {
-	c := ctx()
+	c := safeCtx()
 	c.TmpLock.Lock()
 	defer c.TmpLock.Unlock()
 

@@ -158,14 +158,12 @@ export default {
             _Body = UInt8ToStr(Body, "gbk")
           }
           let language = "plaintext"
-          {
-            try {
-              const json = JSON.parse(_Body);
-              if (typeof json === 'object' && json !== null) {
-                language = "json"
-              }
-            } catch (error) {
+          try {
+            const json = JSON.parse(_Body);
+            if (typeof json === 'object' && json !== null) {
+              language = "json"
             }
+          } catch (error) {
           }
           this.$nextTick(() => {
             this.$refs.RawText.SetLanguage(language)
@@ -175,7 +173,7 @@ export default {
             this.$refs.RawText.SetCode(_Body)
           })
 
-        })
+        }).catch(err => console.error("socket请求获取失败:", err))
       })
       return false
     },
@@ -515,9 +513,8 @@ export default {
   mounted() {
     window.vm.Tabs.Response = this
     {
-      const elementRef = this.$refs.BodyRect; // 获取元素的引用
-      // 创建 ResizeObserver 实例并监听元素尺寸变化
-      const resizeObserver = new ResizeObserver(entries => {
+      const elementRef = this.$refs.BodyRect;
+      this._resizeObserver = new ResizeObserver(entries => {
         for (const entry of entries) {
           const {width, height} = entry.contentRect;
           this.HexViewSize = {w: width, h: height}
@@ -525,19 +522,31 @@ export default {
           this.BodyRectWidth = width + "px"
         }
       });
-      resizeObserver.observe(elementRef); // 开始监听元素尺寸变化
+      this._resizeObserver.observe(elementRef);
     }
-    //禁止点击 iframe 内的所有元素
     {
       const iframe = this.$refs.iframe;
-      // 禁止点击事件
-      iframe.addEventListener('load', function () {
-        const iframeDocument = iframe.contentWindow.document;
-        iframeDocument.addEventListener('click', function (event) {
-          event.stopPropagation();
-          event.preventDefault();
-        }, true);
-      });
+      this._iframeLoadHandler = function () {
+        try {
+          const iframeDocument = iframe.contentWindow.document;
+          iframeDocument.addEventListener('click', function (event) {
+            event.stopPropagation();
+            event.preventDefault();
+          }, true);
+        } catch (e) {
+          // cross-origin iframe
+        }
+      };
+      iframe.addEventListener('load', this._iframeLoadHandler);
+    }
+  },
+  beforeUnmount() {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this.$refs.iframe && this._iframeLoadHandler) {
+      this.$refs.iframe.removeEventListener('load', this._iframeLoadHandler);
     }
   }
 }

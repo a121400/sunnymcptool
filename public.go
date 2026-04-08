@@ -388,7 +388,6 @@ func event(command string, args *JSON.SyJson) any {
 		{
 			if !GlobalConfig.Cert.Default {
 				id := Api.CreateCertificate()
-				defer Api.RemoveCertificate(id)
 				CaFilePath := GlobalConfig.Cert.CaPath
 				KeyFilePath := GlobalConfig.Cert.KeyPath
 				if !Api.LoadX509KeyPair(id, CaFilePath, KeyFilePath) {
@@ -1466,9 +1465,10 @@ func event(command string, args *JSON.SyJson) any {
 		if port <= 0 {
 			port = 29999
 		}
-		if mcpServer == nil {
-			mcpServer = mcp.NewMCPServer(port)
+		if mcpServer != nil && mcpServer.IsRunning() {
+			mcpServer.Stop()
 		}
+		mcpServer = mcp.NewMCPServer(port)
 		err := mcpServer.Start()
 		if err != nil {
 			return map[string]interface{}{"success": false, "error": err.Error()}

@@ -309,6 +309,7 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 						gr, err := gzip.NewReader(io.NopCloser(bytes.NewBuffer(Body)))
 						if err == nil {
 							gr1, err1 := io.ReadAll(gr)
+							_ = gr.Close()
 							if err1 == nil {
 								Conn.SetResponseBody(gr1)
 								isOk = true
@@ -322,8 +323,8 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 						}
 					} else if Encoding == "deflate" {
 						zr := flate.NewReader(io.NopCloser(bytes.NewBuffer(Body)))
-						_ = zr.Close()
 						bx, err := io.ReadAll(zr)
+						_ = zr.Close()
 						if err == nil {
 							Conn.SetResponseBody(bx)
 							isOk = true

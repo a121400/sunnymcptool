@@ -22,7 +22,7 @@ type proxyAppAdapter struct{}
 
 func (a *proxyAppAdapter) StartProxy() error {
 	if app == nil || app.App == nil {
-		return nil
+		return fmt.Errorf("SunnyNet实例未初始化")
 	}
 	return app.App.Start().Error
 }

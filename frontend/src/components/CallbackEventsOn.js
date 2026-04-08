@@ -306,6 +306,7 @@ export async function EventsDo(arg) {
             return
         case "弹出提示消息":
         case "弹出提示信息":
+            if (!Args || !Args.msg) return
             const a = Args.msg.replaceAll("\r", "").replaceAll("\n", "<br>")
             await ElMessageBox.alert(
                 a,
@@ -345,7 +346,7 @@ export async function EventsDo(arg) {
             if (Args === null || Args === "") {
                 CallGoDo("获取运行端口", null).then(port => {
                     window.vm.Footer.Title = "启动成功:" + port
-                })
+                }).catch(err => console.error("获取运行端口失败:", err))
             } else {
                 window.vm.Footer.Title = "启动失败:  " + SunnyErrorReplaceAll(Args)
             }
@@ -673,6 +674,7 @@ export async function EventsDo(arg) {
                 });
                 window.vm.List.agGridApi.onFilterChanged();
             } catch (e) {
+                console.warn("恢复快捷键失败:", e)
             }
         }
             //恢复列数据
@@ -697,6 +699,7 @@ export async function EventsDo(arg) {
                 window.vm.List.RefreshColumns(Columns);
 
             } catch (e) {
+                console.warn("恢复列数据失败:", e)
             }
         }
             //恢复过滤器
@@ -706,13 +709,16 @@ export async function EventsDo(arg) {
                 Object.keys(Filter).forEach((key) => {
                     if (!window.vmColumns[key]) {
                         const responseTypeFilter = window.vm.List.agGridApi.getFilterInstance(key);
-                        responseTypeFilter.setModel(Filter[key]);
+                        if (responseTypeFilter) {
+                            responseTypeFilter.setModel(Filter[key]);
+                        }
                     } else {
                         window.vmFilterTemp[key] = Filter[key];
                     }
                 });
                 window.vm.List.agGridApi.onFilterChanged();
             } catch (e) {
+                console.warn("恢复过滤器失败:", e)
             }
         }
             return
@@ -816,7 +822,8 @@ export function SetColorConfig(Name, Color) {
         obj.dark = Color.dark
         obj.right = Color.right
         IsRefreshRenderedNodes = true
-        CallGoDo("保存配置", {Type: "列表颜色配置", Data: window.interface.colorConfig}).then(r => {
+        CallGoDo("保存配置", {Type: "列表颜色配置", Data: window.interface.colorConfig}).catch(err => {
+            console.error("保存配置失败:", err)
         })
     }
 }
@@ -844,19 +851,19 @@ window.interface = {
 let isExecuting = false;
 setInterval(() => {
     if (!isExecuting) {
-        {
+        isExecuting = true;
+        try {
             if (window.vm.List && IsRefreshList) {
                 window.vm.List.agGridApi.applyTransaction({add: []});
                 IsRefreshList = false
             }
-        }
-        {
-            if (IsRefreshRenderedNodes) {
+            if (window.vm.List && IsRefreshRenderedNodes) {
                 window.vm.List.RefreshRenderedNodes()
                 IsRefreshRenderedNodes = false
             }
+        } finally {
+            isExecuting = false;
         }
-        isExecuting = false;
     }
 }, 200)
 
@@ -865,9 +872,9 @@ export function SetTextColor(obj) {
         if (obj.color === null || obj.color === void 0) {
             obj.color = {}
         }
-        const Method = obj.方式.toUpperCase()
-        const Type = obj.响应类型.toUpperCase()
-        const State = obj.状态.toUpperCase()
+        const Method = (obj.方式 || "").toUpperCase()
+        const Type = (obj.响应类型 || "").toUpperCase()
+        const State = (obj.状态 || "").toUpperCase()
         if (Method.indexOf("TCP") !== -1) {
             obj.color.text = window.interface.colorConfig.tcp
         } else if (Method.indexOf("UDP") !== -1) {

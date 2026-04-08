@@ -415,6 +415,9 @@ func RunCodeLog() (Str string) {
 	}()
 	lock.Lock()
 	defer lock.Unlock()
+	if NewEval == nil {
+		return Str
+	}
 	__log, err := NewEval.Eval("scriptLog")
 	if err != nil {
 		return Str

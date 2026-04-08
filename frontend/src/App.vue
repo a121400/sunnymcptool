@@ -40,7 +40,7 @@ export default {
         }
       }
       if (b) {
-        clearTimeout(Interval);
+        clearInterval(Interval);
         CallGoDo("init", null).then(res => {
           ElNotification({
             title: '免责申明',
@@ -60,6 +60,8 @@ export default {
               message: '<span  style="color: #3ccbff">若是第一次使用,请查看"证书安装教程"</span>',
             })
           }, 1000)
+        }).catch(err => {
+          console.error("init 调用失败:", err)
         })
         window.Theme.IsDark = true
       }

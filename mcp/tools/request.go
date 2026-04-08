@@ -231,7 +231,11 @@ func toolRequestListHandler(args map[string]interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	hashMap := ctx().HashMap
+	c, err := requireCtx()
+	if err != nil || c.HashMap == nil {
+		return nil, fmt.Errorf("应用上下文未初始化")
+	}
+	hashMap := c.HashMap
 	var keys []int
 
 	hashMap.Search(func(theology int, _ int, req *MapHash.Request) {
@@ -267,7 +271,11 @@ func toolRequestGetHandler(args map[string]interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	c, err := requireCtx()
+	if err != nil || c.HashMap == nil {
+		return nil, errCtxNil
+	}
+	h := c.HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -298,7 +306,7 @@ func toolRequestModifyHeaderHandler(args map[string]interface{}) (interface{}, e
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -327,7 +335,7 @@ func toolRequestModifyBodyHandler(args map[string]interface{}) (interface{}, err
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -351,7 +359,7 @@ func toolResponseModifyHeaderHandler(args map[string]interface{}) (interface{}, 
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -380,7 +388,7 @@ func toolResponseModifyBodyHandler(args map[string]interface{}) (interface{}, er
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
@@ -402,12 +410,11 @@ func toolRequestBlockHandler(args map[string]interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	h := ctx().HashMap.GetRequest(theology)
+	h := safeCtx().HashMap.GetRequest(theology)
 	if h == nil {
 		return nil, fmt.Errorf("请求 %d 不存在", theology)
 	}
 	h.Break = 1
-	h.Wait.Add(1)
 
 	return map[string]interface{}{
 		"success": true, "theology": theology, "message": "请求已被阻断，等待处理",
@@ -437,7 +444,11 @@ func toolRequestSearchHandler(args map[string]interface{}) (interface{}, error) 
 	}
 
 	_, hasStatusCode := args["status_code"]
-	hashMap := ctx().HashMap
+	c2, err2 := requireCtx()
+	if err2 != nil || c2.HashMap == nil {
+		return nil, errCtxNil
+	}
+	hashMap := c2.HashMap
 	var matchedKeys []int
 
 	hashMap.Search(func(theology int, _ int, req *MapHash.Request) {
@@ -486,7 +497,11 @@ func toolRequestSaveAllHandler(args map[string]interface{}) (interface{}, error)
 		return nil, errors.New("文件路径不能为空")
 	}
 
-	dio := ctx().DataIO
+	cSave, errSave := requireCtx()
+	if errSave != nil {
+		return nil, errSave
+	}
+	dio := cSave.DataIO
 	if dio == nil {
 		return nil, errors.New("数据导入导出模块未初始化")
 	}
@@ -508,7 +523,11 @@ func toolRequestImportHandler(args map[string]interface{}) (interface{}, error) 
 		return nil, errors.New("文件路径不能为空")
 	}
 
-	dio := ctx().DataIO
+	cImp, errImp := requireCtx()
+	if errImp != nil {
+		return nil, errImp
+	}
+	dio := cImp.DataIO
 	if dio == nil {
 		return nil, errors.New("数据导入导出模块未初始化")
 	}
