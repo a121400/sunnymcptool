@@ -198,23 +198,6 @@ func init() {
 		Handler: toolRequestSearchHandler,
 	})
 
-	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
-		Name:        "request_delete",
-		Description: "删除指定的请求记录",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"theologies": map[string]interface{}{
-					"type":        "array",
-					"items":       map[string]interface{}{"type": "integer"},
-					"description": "要删除的请求ID列表",
-				},
-			},
-			"required": []string{"theologies"},
-		},
-		Handler: toolRequestDeleteHandler,
-	})
-
 }
 
 func toolRequestListHandler(args map[string]interface{}) (interface{}, error) {
@@ -534,26 +517,4 @@ func toolRequestImportHandler(args map[string]interface{}) (interface{}, error) 
 	}, nil
 }
 
-func toolRequestDeleteHandler(args map[string]interface{}) (interface{}, error) {
-	v := mcp.NewParamValidator(args)
-	theologies := v.RequireIntArray("theologies")
-	if err := v.Error(); err != nil {
-		return nil, err
-	}
-	if len(theologies) == 0 {
-		return nil, errors.New("请求ID列表不能为空")
-	}
-	c := ctx()
-	if c == nil || c.HashMap == nil {
-		return nil, errors.New("应用上下文未初始化")
-	}
-	c.HashMap.Delete(theologies)
-	if c.NotifyUI != nil {
-		c.NotifyUI("MCP删除请求", theologies)
-	}
-	return map[string]interface{}{
-		"success": true, "count": len(theologies),
-		"message": fmt.Sprintf("已删除 %d 条请求记录", len(theologies)),
-	}, nil
-}
 
