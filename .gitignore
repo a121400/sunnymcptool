@@ -13,6 +13,7 @@ frontend/dist/
 .idea/
 .vscode/
 *.iml
+.kiro/
 
 # 临时文件
 *.log
@@ -32,11 +33,11 @@ vendor/
 # Wails 构建产物
 wails_build_output/
 
-# IDE spec 文件
-.kiro/
-
-# macOS binaries
+# Compiled binaries (root)
 sunnynet-mcp
+
+# iOS tool binaries (source only)
+ios-tool/*.dylib
 ios-tool/sunny-tool
 ios-tool/sunny-tool-final
 ios-tool/sunny-tool-ios
