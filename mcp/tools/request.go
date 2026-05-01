@@ -215,12 +215,6 @@ func init() {
 		Handler: toolRequestDeleteHandler,
 	})
 
-	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
-		Name:        "request_clear",
-		Description: "清空全部已捕获的请求列表（保留活跃的长连接）",
-		InputSchema: noParamsSchema(),
-		Handler:     toolRequestClearHandler,
-	})
 }
 
 func toolRequestListHandler(args map[string]interface{}) (interface{}, error) {
@@ -563,16 +557,3 @@ func toolRequestDeleteHandler(args map[string]interface{}) (interface{}, error) 
 	}, nil
 }
 
-func toolRequestClearHandler(args map[string]interface{}) (interface{}, error) {
-	c := ctx()
-	if c == nil || c.HashMap == nil {
-		return nil, errors.New("应用上下文未初始化")
-	}
-	c.HashMap.Empty()
-	if c.NotifyUI != nil {
-		c.NotifyUI("MCP清空请求", nil)
-	}
-	return map[string]interface{}{
-		"success": true, "message": "已清空全部请求列表",
-	}, nil
-}

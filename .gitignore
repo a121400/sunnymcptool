@@ -34,3 +34,11 @@ wails_build_output/
 
 # IDE spec 文件
 .kiro/
+
+# macOS binaries
+sunnynet-mcp
+ios-tool/sunny-tool
+ios-tool/sunny-tool-final
+ios-tool/sunny-tool-ios
+ios-tool/go.mod
+ios-tool/main.go

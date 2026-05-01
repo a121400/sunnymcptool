@@ -617,35 +617,35 @@ export default {
       const releaseObjs = window.KeysStrings["放行当前请求"]
       const proxyObjs = window.KeysStrings["设置/取消IE代理"]
       const ClearAllObjs = window.KeysStrings["清空全部记录"]
-      if (event.ctrlKey === ClearAllObjs.ctrlKey && event.altKey === ClearAllObjs.altKey && event.shiftKey === ClearAllObjs.shiftKey && mKey === ClearAllObjs.key) {
+      if ((event.ctrlKey || event.metaKey) === ClearAllObjs.ctrlKey && event.altKey === ClearAllObjs.altKey && event.shiftKey === ClearAllObjs.shiftKey && mKey === ClearAllObjs.key) {
         if (ClearAllObjs.value === "") {
           return;
         }
         window.vm.Header.clickRemoveAll(1)
         return
       }
-      if (event.ctrlKey === proxyObjs.ctrlKey && event.altKey === proxyObjs.altKey && event.shiftKey === proxyObjs.shiftKey && mKey === proxyObjs.key) {
+      if ((event.ctrlKey || event.metaKey) === proxyObjs.ctrlKey && event.altKey === proxyObjs.altKey && event.shiftKey === proxyObjs.shiftKey && mKey === proxyObjs.key) {
         if (proxyObjs.value === "") {
           return;
         }
         window.vm.IEProxy.Click()
         return
       }
-      if (event.ctrlKey === releaseObjs.ctrlKey && event.altKey === releaseObjs.altKey && event.shiftKey === releaseObjs.shiftKey && mKey === releaseObjs.key) {
+      if ((event.ctrlKey || event.metaKey) === releaseObjs.ctrlKey && event.altKey === releaseObjs.altKey && event.shiftKey === releaseObjs.shiftKey && mKey === releaseObjs.key) {
         if (releaseObjs.value === "") {
           return;
         }
         window.vm.Tabs.ToolPanel.ReleaseBreak()
         return
       }
-      if (event.ctrlKey === releaseAllObjs.ctrlKey && event.altKey === releaseAllObjs.altKey && event.shiftKey === releaseAllObjs.shiftKey && mKey === releaseAllObjs.key) {
+      if ((event.ctrlKey || event.metaKey) === releaseAllObjs.ctrlKey && event.altKey === releaseAllObjs.altKey && event.shiftKey === releaseAllObjs.shiftKey && mKey === releaseAllObjs.key) {
         if (releaseAllObjs.value === "") {
           return;
         }
         window.vm.Header.ReleaseAll()
         return
       }
-      if (event.ctrlKey === FindObjs.ctrlKey && event.altKey === FindObjs.altKey && event.shiftKey === FindObjs.shiftKey && mKey === FindObjs.key) {
+      if ((event.ctrlKey || event.metaKey) === FindObjs.ctrlKey && event.altKey === FindObjs.altKey && event.shiftKey === FindObjs.shiftKey && mKey === FindObjs.key) {
         if (FindObjs.value === "") {
           return;
         }
@@ -659,7 +659,7 @@ export default {
         })
         return
       }
-      if (event.ctrlKey === copyObjs.ctrlKey && event.altKey === copyObjs.altKey && event.shiftKey === copyObjs.shiftKey && mKey === copyObjs.key) {
+      if ((event.ctrlKey || event.metaKey) === copyObjs.ctrlKey && event.altKey === copyObjs.altKey && event.shiftKey === copyObjs.shiftKey && mKey === copyObjs.key) {
         if (copyObjs.value === "") {
           return;
         }
