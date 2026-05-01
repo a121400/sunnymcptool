@@ -6,24 +6,43 @@
 
 ### 1. 下载
 
-从 [Releases](https://github.com/a121400/sunnymcptool/releases) 下载：
-- `SunnyNet.exe` — GUI 主程序（含内置 MCP Server，启动后自动开启）
-- `sunnynet-mcp.exe` — MCP 独立服务（stdio 转发，供 Cursor/Claude Desktop 调用）
+从 [Releases](https://github.com/a121400/sunnymcptool/releases) 下载对应平台：
+
+**Windows:**
+- `SunnyNet.exe` — GUI 主程序（含内置 MCP Server）
+- `sunnynet-mcp.exe` — MCP stdio 桥接
+
+**macOS (Apple Silicon):**
+- `SunnyNet.app` — GUI 主程序（含内置 MCP Server）
+- `sunnynet-mcp` — MCP stdio 桥接
 
 ### 2. 配置 Cursor
 
+**Windows:**
 ```json
 {
   "mcpServers": {
     "sunnynet": {
       "command": "C:\\path\\to\\sunnynet-mcp.exe",
-      "args": []
+      "args": ["-port", "29999"]
     }
   }
 }
 ```
 
-先启动 `SunnyNet.exe`，MCP 独立服务通过 HTTP 转发请求到主程序。
+**macOS:**
+```json
+{
+  "mcpServers": {
+    "sunnynet": {
+      "command": "/path/to/sunnynet-mcp",
+      "args": ["-port", "29999"]
+    }
+  }
+}
+```
+
+先启动 GUI 主程序（SunnyNet.exe 或 SunnyNet.app），MCP 桥接通过 HTTP 转发请求到主程序的 MCP 端点（默认 :29999/mcp）。
 
 ### 3. 使用
 
@@ -55,7 +74,6 @@
 | | `request_release_all` | 放行所有请求 |
 | | `request_resend` | 重发请求 |
 | | `request_delete` | 删除请求记录 |
-| | `request_clear` | 清空请求列表 |
 | | `request_stats` | 抓包统计信息 |
 | | `request_save_all` | 保存全部抓包数据 |
 | | `request_import` | 导入抓包数据 |
@@ -83,6 +101,7 @@
 
 ## 从源码编译
 
+**Windows (PowerShell):**
 ```powershell
 git clone https://github.com/a121400/sunnymcptool.git
 cd sunnymcptool
@@ -92,7 +111,29 @@ cd sunnymcptool
 .\scripts\build.ps1 -Target mcp  # 仅 MCP
 ```
 
+**macOS (需要 Go 1.21+ 和 Wails v2):**
+```bash
+git clone --recurse-submodules https://github.com/a121400/sunnymcptool.git
+cd sunnymcptool
+
+# 安装 Wails CLI
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+# 编译 GUI
+wails build -platform darwin/arm64
+
+# 编译 MCP 桥接
+cd headless && go build -o ../build/bin/sunnynet-mcp .
+```
+
 产物在 `build/bin/` 目录。
+
+## iOS 抓包工具（越狱设备）
+
+`ios-tool/` 目录包含：
+- `hide_proxy.c` — CydiaSubstrate tweak，hook CFNetworkCopySystemProxySettings 绕过 App 代理检测
+- `HideProxy.plist` — MobileSubstrate 过滤器
+- `sunny-tool.sh` — 越狱 iOS 一键安装 CA 证书和配置 WiFi 代理的脚本
 
 ## 致谢
 
