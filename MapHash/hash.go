@@ -369,7 +369,7 @@ func (m *Map) SaveToFile(Path string, All bool, TheologyArray []int, SetStatusTe
 		return false
 	}
 	SetStatusText("正在写入文件")
-	err := os.WriteFile(Path, bs2, 666)
+	err := os.WriteFile(Path, bs2, 0644)
 	if err == nil {
 		SetStatusText("保存记录文件成功：" + Path)
 	} else {

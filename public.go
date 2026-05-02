@@ -826,11 +826,11 @@ func event(command string, args *JSON.SyJson) any {
 			timestamp10 := strconv.FormatInt(time.Now().Unix(), 10)
 			_path = strings.ReplaceAll(_path+"/"+timestamp10+"."+args.GetData("type"), "\\", "/")
 			if IsRequest == 1 {
-				err = os.WriteFile(_path, h.Body, 777)
+				err = os.WriteFile(_path, h.Body, 0644)
 			} else if IsRequest == 2 {
-				err = os.WriteFile(_path, hm, 777)
+				err = os.WriteFile(_path, hm, 0644)
 			} else {
-				err = os.WriteFile(_path, h.Response.Body, 777)
+				err = os.WriteFile(_path, h.Response.Body, 0644)
 			}
 			if err != nil {
 				CallJs("弹出错误提示", "写入文件时出错:"+err.Error())
@@ -1282,12 +1282,12 @@ func event(command string, args *JSON.SyJson) any {
 		_ = os.Remove(path2)
 		ca := Api.ExportCA(id)
 		key := Api.ExportKEY(id)
-		e = os.WriteFile(path1, []byte(ca), 777)
+		e = os.WriteFile(path1, []byte(ca), 0644)
 		if e != nil {
 			CallJs("弹出错误提示", "创建证书失败:出错CA文件到指定路径失败")
 			return false
 		}
-		e = os.WriteFile(path2, []byte(key), 777)
+		e = os.WriteFile(path2, []byte(key), 0644)
 		if e != nil {
 			CallJs("弹出错误提示", "创建证书失败:出错KEY文件到指定路径失败")
 			return false
@@ -1366,7 +1366,7 @@ func event(command string, args *JSON.SyJson) any {
 			path1 += ".cer"
 		}
 		_ = os.Remove(path1)
-		if os.WriteFile(path1, []byte(public.RootCa), 777) == nil {
+		if os.WriteFile(path1, []byte(public.RootCa), 0644) == nil {
 			CallJs("弹出成功提示", "保存默认证书文件成功")
 			return true
 		}

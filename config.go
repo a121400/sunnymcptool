@@ -990,7 +990,7 @@ func (c *UserConfig) saveToFile() error {
 	if e != nil {
 		return e
 	}
-	e = os.WriteFile(homeDir+"/Sunny/Config.json", bs, 777)
+	e = os.WriteFile(homeDir+"/Sunny/Config.json", bs, 0644)
 	return e
 }
 func (c *UserConfig) LoadLocalFile() {
