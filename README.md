@@ -58,6 +58,7 @@ Cursor ──stdio──> sunnynet-mcp ──HTTP──> SunnyNet GUI (:29999/mc
 
 - **GUI 主程序**：Wails 桌面应用，包含完整 SunnyNet 引擎 + MCP HTTP Server + 可视化界面
 - **MCP 桥接**：纯 Go 程序（~8MB），处理 MCP 协议握手，转发工具调用到 GUI
+- **tshark 后端**：集成 Wireshark tshark 实现网卡级原始抓包和协议解析（需单独放置 `wireshark/` 目录）
 
 ## MCP 工具列表
 
@@ -78,7 +79,7 @@ Cursor ──stdio──> sunnynet-mcp ──HTTP──> SunnyNet GUI (:29999/mc
 | | `request_block` | 阻断请求 |
 | | `request_release_all` | 放行所有拦截的请求 |
 | | `request_resend` | 重发请求 |
-| | `request_delete` | 删除请求记录 |
+
 | | `request_stats` | 抓包统计 |
 | | `request_save_all` / `request_import` | 保存/导入抓包数据（.syn 格式） |
 | | `request_highlight_search` / `request_highlight_clear` | UI 高亮搜索 |
@@ -88,6 +89,12 @@ Cursor ──stdio──> sunnynet-mcp ──HTTP──> SunnyNet GUI (:29999/mc
 | **规则** | `replace_rules_add` / `replace_rules_list` / `replace_rules_remove` / `replace_rules_clear` | 替换规则 |
 | | `hosts_list` / `hosts_add` / `hosts_remove` | HOSTS 规则 |
 | **进程** | `process_list` / `process_add_name` / `process_remove_name` | 进程过滤 |
+| **抓包(Wireshark)** | `capture_list_interfaces` | 列出网络接口（需 Npcap） |
+| | `capture_start` / `capture_stop` / `capture_status` | 原始网卡级抓包 |
+| | `capture_read_pcap` | 读取 pcap + Wireshark 显示过滤器 |
+| | `capture_packet_detail` | 单帧完整协议解析 |
+| | `capture_decode_tls` | TLS 密钥日志解密 HTTPS |
+| | `capture_statistics` | 协议层次/会话/端点统计 |
 | **证书** | `cert_install` / `cert_export` | CA 证书管理 |
 | **配置** | `config_get` | 获取全部配置 |
 
@@ -118,6 +125,12 @@ cd headless && go build -o ../build/bin/sunnynet-mcp .
 ```
 
 产物在 `build/bin/` 目录。
+
+**Wireshark 抓包功能（可选）：**
+
+capture_ 工具族需要 tshark 可执行文件。将编译好的 Wireshark 放到 `build/bin/wireshark/` 目录：
+- Windows: 需要 [Npcap](https://npcap.com/) 驱动才能实时抓包
+- 从 [Wireshark 源码](https://gitlab.com/wireshark/wireshark) 编译或下载官方安装包中的 tshark.exe
 
 ## 项目结构
 
