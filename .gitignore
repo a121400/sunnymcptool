@@ -43,3 +43,6 @@ ios-tool/sunny-tool-final
 ios-tool/sunny-tool-ios
 ios-tool/go.mod
 ios-tool/main.go
+
+# Wireshark binaries (compiled from source, too large for git)
+wireshark/
