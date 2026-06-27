@@ -810,6 +810,13 @@ export async function EventsDo(arg) {
             }
             return
         }
+        case "安卓云函数Hook状态":
+            if (window.vm && window.vm.Header) {
+                const running = !!(Args && Args.running)
+                window.vm.Header.AndroidHookRunning = running
+                window.vm.Header.AndroidHookStatus = running ? 'running' : 'off'
+            }
+            return
         default:
             console.log(arg.Command, arg)
             return

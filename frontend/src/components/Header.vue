@@ -130,6 +130,26 @@
               </div>
             </div>
           </el-menu-item>
+          <el-menu-item index="安卓抓包">
+            <div style="display: flex; align-items: center;">
+              <div style="cursor: pointer; display: flex; align-items: center;position: relative;top:1px">
+                <el-icon v-show="AndroidHookStatus === 'off'" style="color: #909399">
+                  <Iphone/>
+                </el-icon>
+                <el-icon v-show="AndroidHookStatus === 'starting'" style="color: #E6A23C" class="is-loading">
+                  <Iphone/>
+                </el-icon>
+                <el-icon v-show="AndroidHookStatus === 'running'" style="color: #67C23A">
+                  <Iphone/>
+                </el-icon>
+                <el-tooltip class="item" effect="dark"
+                            :content="AndroidHookStatus === 'running' ? '安卓云函数抓包中 (点击停止)' : AndroidHookStatus === 'starting' ? '正在启动Hook...' : '启动安卓云函数抓包'"
+                            placement="top">
+                  <span>{{ AndroidHookStatus === 'starting' ? '启动中...' : AndroidHookStatus === 'running' ? '抓包中' : 'Cloud安卓' }}</span>
+                </el-tooltip>
+              </div>
+            </div>
+          </el-menu-item>
           <el-menu-item index="自动滚动">
             <div style="display: flex; align-items: center;">
               <div style="cursor: pointer; display: flex; align-items: center;position: relative;top:1px">
@@ -253,7 +273,7 @@ import '../../wailsjs/runtime/runtime.js';
 import {EventsOn, WindowMinimise, WindowToggleMaximise} from "../../wailsjs/runtime/runtime.js";
 import {Do} from "../../wailsjs/go/main/App.js";
 import {CallGoDo, EventsDo, StrBase64Encode} from "./CallbackEventsOn.js";
-import {CircleCloseFilled, SuccessFilled, WarningFilled, Loading} from '@element-plus/icons-vue'
+import {CircleCloseFilled, SuccessFilled, WarningFilled, Loading, Iphone} from '@element-plus/icons-vue'
 import {ElMessage} from "element-plus";
 import Doc from "./CertDoc/Doc.vue";
 import OpenSourceProtocol from "./OpenSourceProtocol/OpenSourceProtocol.vue";
@@ -320,6 +340,8 @@ export default {
     return {
       Stop: false,
       AutoRollShow: false,
+      AndroidHookRunning: false,
+      AndroidHookStatus: 'off',
       McpRunning: false,
       McpPort: 29999,
       McpError: '',
@@ -431,6 +453,12 @@ export default {
 
       //MCP服务 (纯状态显示，无需操作)
       if (key === "MCP服务") {
+        return
+      }
+
+      //安卓抓包
+      if (key === "安卓抓包") {
+        this.toggleAndroidHook()
         return
       }
 
@@ -575,6 +603,25 @@ export default {
     },
     ReleaseAll() {
       CallGoDo("全部放行", null)
+    },
+    toggleAndroidHook() {
+      if (this.AndroidHookStatus === 'running' || this.AndroidHookStatus === 'starting') {
+        CallGoDo("停止安卓云函数Hook", null).then(res => {
+          if (res && res.success) {
+            this.AndroidHookRunning = false
+            this.AndroidHookStatus = 'off'
+            ElMessage({ message: "安卓抓包已停止", type: 'info' })
+          }
+        })
+      } else {
+        this.AndroidHookStatus = 'starting'
+        CallGoDo("启动安卓云函数Hook", null).then(res => {
+          if (res && res.error) {
+            this.AndroidHookStatus = 'off'
+            ElMessage({ message: "启动失败: " + res.error, type: 'error' })
+          }
+        })
+      }
     },
     getMcpStatus() {
       CallGoDo("获取MCP状态", null).then(res => {

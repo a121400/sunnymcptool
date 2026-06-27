@@ -12,6 +12,7 @@ require (
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/qtgolang/SunnyNet v1.0.0
 	github.com/traefik/yaegi v0.15.1
+	github.com/ulikunitz/xz v0.5.15
 	github.com/wailsapp/wails/v2 v2.11.0
 	golang.org/x/text v0.23.0
 )

@@ -1485,6 +1485,13 @@ func event(command string, args *JSON.SyJson) any {
 		}
 		return map[string]interface{}{"running": mcpServer.IsRunning(), "port": mcpServer.GetPort(), "error": mcpStartError}
 
+	case "启动安卓云函数Hook":
+		return StartCloudHook()
+	case "停止安卓云函数Hook":
+		return StopCloudHook()
+	case "获取安卓Hook状态":
+		return GetCloudHookStatus()
+
 	case "":
 		return ""
 	default:
