@@ -132,12 +132,49 @@ capture_ 工具族需要 tshark 可执行文件。将编译好的 Wireshark 放�
 - Windows: 需要 [Npcap](https://npcap.com/) 驱动才能实时抓包
 - 从 [Wireshark 源码](https://gitlab.com/wireshark/wireshark) 编译或下载官方安装包中的 tshark.exe
 
+## 安卓云函数抓包 (Cloud安卓)
+
+一键抓取安卓微信小程序的云函数 API 调用，无需配置代理证书。
+
+### 原理
+
+通过 Frida 动态注入 Hook 微信进程的 `AppBrandCommonBindingJni.nativeInvokeHandler` 和 `invokeCallbackHandler`，实时拦截所有云函数的请求和响应。
+
+### 使用
+
+1. 手机连接 USB，打开 USB 调试
+2. 手机需要 ROOT 权限（Magisk / KernelSU）
+3. 在 SunnyNet GUI 点击顶部 **"Cloud安卓"** 按钮
+4. 首次使用会自动下载 Node.js 和 Frida 依赖（约1-2分钟）
+5. Hook 成功后弹窗提示，开始自动捕获云函数调用
+
+### 自动处理
+
+- **Node.js**：未安装则自动下载便携版到 `%APPDATA%/SunnyNet/node/`
+- **frida-server**：自动检测手机版本，不匹配则下载安装对应版本
+- **npm 依赖**：首次自动安装 `frida` + `frida-java-bridge`
+
+### 列表显示
+
+- 蓝色上箭头 `→发送`：小程序发出的请求
+- 绿色下箭头 `←响应`：微信返回的响应
+- 点击条目查看完整 JSON 数据
+
+### 相关文件
+
+- `cloud_hook.go` — Hook 生命周期管理 + 数据转换
+- `adb_frida.go` — ADB 设备管理 + frida-server 部署
+- `frida-scripts/` — 嵌入的 JS 注入脚本
+
 ## 项目结构
 
 ```
 ├── main.go              # Wails 入口
 ├── app.go               # Wails App 绑定
 ├── public.go            # GUI↔Go 回调
+├── cloud_hook.go        # 安卓云函数 Hook 服务
+├── adb_frida.go         # ADB/Frida 设备管理
+├── frida-scripts/       # Frida 注入脚本（嵌入到二进制）
 ├── mcp/                 # MCP Server 框架（registry, validator, middleware）
 │   └── tools/           # MCP 工具实现（request, proxy, breakpoint, replace...）
 ├── headless/            # stdio→HTTP MCP 桥接程序
