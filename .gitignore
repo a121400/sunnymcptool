@@ -5,6 +5,11 @@ build/bin/
 *.so
 *.dylib
 
+# SunnyNet 嵌入式资源文件（编译必需）
+!SunnyNet/src/Resource/**/*.exe
+!SunnyNet/src/Resource/**/*.dll
+!SunnyNet/src/Resource/**/*.sys
+
 # 依赖目录
 node_modules/
 frontend/dist/
