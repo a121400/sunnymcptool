@@ -100,31 +100,23 @@ Cursor ──stdio──> sunnynet-mcp ──HTTP──> SunnyNet GUI (:29999/mc
 
 ## 从源码编译
 
-**前置条件**：Go 1.21+、Node.js 18+
+**前置条件**：Go 1.23+、Node.js 18+、[Wails CLI](https://wails.io/docs/gettingstarted/installation)
 
-**Windows：**
-```powershell
-git clone --recurse-submodules https://github.com/a121400/sunnymcptool.git
-cd sunnymcptool
-.\scripts\build.ps1
-```
-
-**macOS：**
 ```bash
-git clone --recurse-submodules https://github.com/a121400/sunnymcptool.git
+git clone https://github.com/a121400/sunnymcptool.git
 cd sunnymcptool
 
 # 安装 Wails CLI（如未安装）
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-# 编译 GUI
-wails build -platform darwin/arm64
+# 编译（自动处理前端 + 后端）
+wails build
 
-# 编译 MCP 桥接
+# 编译 MCP 桥接（可选）
 cd headless && go build -o ../build/bin/sunnynet-mcp .
 ```
 
-产物在 `build/bin/` 目录。
+产物在 `build/bin/` 目录。macOS 用户可指定平台：`wails build -platform darwin/arm64`
 
 **Wireshark 抓包功能（可选）：**
 
@@ -184,7 +176,7 @@ capture_ 工具族需要 tshark 可执行文件。将编译好的 Wireshark 放�
 │   └── sunny-tool.sh    # iOS 一键 CA 证书+代理配置
 ├── CommAnd/             # 平台特定命令（darwin/windows/linux）
 ├── MapHash/             # 请求哈希表存储
-├── SunnyNet/            # SunnyNet 核心引擎（子模块）
+├── SunnyNet/            # SunnyNet 核心引擎（内嵌源码）
 ├── frontend/            # Vue.js 前端（AG-Grid + Element Plus）
 ├── scripts/             # 构建脚本
 └── build/               # Wails 构建配置
