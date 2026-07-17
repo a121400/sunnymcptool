@@ -270,30 +270,56 @@ func decompressXZ(src, dst string) error {
 }
 
 func downloadFile(url, dst string) error {
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return err
+	mirrors := []string{
+		url,
+		"https://gh-proxy.com/" + url,
+		"https://ghproxy.net/" + url,
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode == 302 || resp.StatusCode == 301 {
-		loc := resp.Header.Get("Location")
-		if loc != "" {
-			return downloadFile(loc, dst)
+	var lastErr error
+	for i, u := range mirrors {
+		if i > 0 {
+			cloudHook.addLog(fmt.Sprintf("尝试镜像 #%d...", i+1))
 		}
-	}
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
+		client := &http.Client{Timeout: 300 * time.Second}
+		resp, err := client.Get(u)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode == 302 || resp.StatusCode == 301 {
+			loc := resp.Header.Get("Location")
+			resp.Body.Close()
+			if loc != "" {
+				resp, err = client.Get(loc)
+				if err != nil {
+					lastErr = err
+					continue
+				}
+			}
+		}
+		if resp.StatusCode != 200 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+			continue
+		}
 
-	f, err := os.Create(dst)
-	if err != nil {
-		return err
+		f, err := os.Create(dst)
+		if err != nil {
+			resp.Body.Close()
+			return err
+		}
+		_, err = io.Copy(f, resp.Body)
+		f.Close()
+		resp.Body.Close()
+		if err != nil {
+			os.Remove(dst)
+			lastErr = err
+			continue
+		}
+		return nil
 	}
-	defer f.Close()
-	_, err = io.Copy(f, resp.Body)
-	return err
+	return lastErr
 }
 
 type WeChatProcess struct {
@@ -340,6 +366,14 @@ func GetDeviceFridaVersion() string {
 	return strings.TrimSpace(out)
 }
 
+func fridaMajorMinor(ver string) string {
+	parts := strings.Split(ver, ".")
+	if len(parts) >= 2 {
+		return parts[0] + "." + parts[1]
+	}
+	return ver
+}
+
 func EnsureFridaServer() error {
 	cliVersion := GetFridaVersion()
 	cloudHook.addLog("frida CLI 版本: " + cliVersion)
@@ -347,15 +381,21 @@ func EnsureFridaServer() error {
 	if IsFridaServerInstalled() {
 		deviceVersion := GetDeviceFridaVersion()
 		cloudHook.addLog("设备 frida-server 版本: " + deviceVersion)
-		if deviceVersion != cliVersion {
-			cloudHook.addLog(fmt.Sprintf("版本不匹配 (CLI=%s, Server=%s)，重新安装...", cliVersion, deviceVersion))
+		cliMM := fridaMajorMinor(cliVersion)
+		devMM := fridaMajorMinor(deviceVersion)
+		if cliMM != devMM {
+			cloudHook.addLog(fmt.Sprintf("主版本不匹配 (%s vs %s)，重新安装...", cliVersion, deviceVersion))
 			adbShellSu("killall frida-server")
 			time.Sleep(500 * time.Millisecond)
 			if err := InstallFridaServer(); err != nil {
 				return err
 			}
 		} else {
-			cloudHook.addLog("frida-server 版本匹配")
+			if deviceVersion != cliVersion {
+				cloudHook.addLog(fmt.Sprintf("补丁版本差异 (%s vs %s)，兼容可用", cliVersion, deviceVersion))
+			} else {
+				cloudHook.addLog("frida-server 版本匹配")
+			}
 		}
 	} else {
 		cloudHook.addLog("设备未安装 frida-server，开始安装...")
