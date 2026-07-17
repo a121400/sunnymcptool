@@ -236,6 +236,30 @@ func findNpm(nodeExe string) string {
 	return "npm"
 }
 
+func isFridaModuleValid(dir string) bool {
+	fridaModule := filepath.Join(dir, "node_modules", "frida")
+	bridgeModule := filepath.Join(dir, "node_modules", "frida-java-bridge")
+	if _, err := os.Stat(fridaModule); os.IsNotExist(err) {
+		return false
+	}
+	if _, err := os.Stat(bridgeModule); os.IsNotExist(err) {
+		return false
+	}
+	bindingDir := filepath.Join(fridaModule, "prebuilds")
+	if entries, err := os.ReadDir(bindingDir); err != nil || len(entries) == 0 {
+		return false
+	}
+	return true
+}
+
+func runNpmInstall(npmPath, dir string, env []string) ([]byte, error) {
+	cmd := exec.Command(npmPath, "install", "frida", "frida-java-bridge", "--no-optional")
+	cmd.Dir = dir
+	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.CombinedOutput()
+}
+
 func ensureFridaScripts(nodeExe string) (string, error) {
 	dir := getFridaScriptsDir()
 	os.MkdirAll(dir, 0755)
@@ -252,26 +276,44 @@ func ensureFridaScripts(nodeExe string) (string, error) {
 		}
 	}
 
-	fridaModule := filepath.Join(dir, "node_modules", "frida")
-	bridgeModule := filepath.Join(dir, "node_modules", "frida-java-bridge")
-	_, fridaErr := os.Stat(fridaModule)
-	_, bridgeErr := os.Stat(bridgeModule)
-	if os.IsNotExist(fridaErr) || os.IsNotExist(bridgeErr) {
-		CallJsAlert("首次安装", "正在安装 Frida 依赖 (npm install)，首次约需1-2分钟...")
-		pkgJson := `{"name":"sunny-frida","private":true,"type":"module"}`
-		os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkgJson), 0644)
-
-		npmPath := findNpm(nodeExe)
-		cmd := exec.Command(npmPath, "install", "frida", "frida-java-bridge", "--no-optional")
-		cmd.Dir = dir
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return "", fmt.Errorf("npm install 失败: %s\n%v", string(out), err)
-		}
+	if isFridaModuleValid(dir) {
+		return filepath.Join(dir, "frida_inject.mjs"), nil
 	}
 
-	return filepath.Join(dir, "frida_inject.mjs"), nil
+	os.RemoveAll(filepath.Join(dir, "node_modules"))
+
+	CallJsAlert("首次安装", "正在安装 Frida 依赖 (npm install)，首次约需1-2分钟...")
+	cloudHook.addLog("npm install frida + frida-java-bridge ...")
+	pkgJson := `{"name":"sunny-frida","private":true,"type":"module"}`
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkgJson), 0644)
+
+	npmPath := findNpm(nodeExe)
+	nodeDir := filepath.Dir(nodeExe)
+	baseEnv := os.Environ()
+	for i, e := range baseEnv {
+		if strings.HasPrefix(strings.ToUpper(e), "PATH=") {
+			baseEnv[i] = "PATH=" + nodeDir + ";" + e[5:]
+			break
+		}
+	}
+	baseEnv = append(baseEnv, "npm_config_registry=https://registry.npmmirror.com")
+
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		cloudHook.addLog(fmt.Sprintf("npm install 尝试 %d/3 ...", attempt))
+		out, err := runNpmInstall(npmPath, dir, baseEnv)
+		if err == nil && isFridaModuleValid(dir) {
+			cloudHook.addLog("npm install 成功")
+			return filepath.Join(dir, "frida_inject.mjs"), nil
+		}
+		lastErr = fmt.Errorf("%s\n%v", string(out), err)
+		cloudHook.addLog(fmt.Sprintf("npm install 第 %d 次失败，清理重试...", attempt))
+		os.RemoveAll(filepath.Join(dir, "node_modules"))
+		os.Remove(filepath.Join(dir, "package-lock.json"))
+		time.Sleep(2 * time.Second)
+	}
+
+	return "", fmt.Errorf("npm install 3次均失败: %v", lastErr)
 }
 
 func runCloudHook() {
