@@ -813,8 +813,20 @@ export async function EventsDo(arg) {
         case "安卓云函数Hook状态":
             if (window.vm && window.vm.Header) {
                 const running = !!(Args && Args.running)
+                const wasRunning = window.vm.Header.AndroidHookStatus === 'running' || window.vm.Header.AndroidHookStatus === 'starting'
                 window.vm.Header.AndroidHookRunning = running
                 window.vm.Header.AndroidHookStatus = running ? 'running' : 'off'
+                if (!running && wasRunning && window.vm.Header.cloudHookLogs.length > 0) {
+                    window.vm.Header.showCloudHookLogs = true
+                }
+            }
+            return
+        case "安卓云函数Hook日志":
+            if (Args && Args.log && window.vm && window.vm.Header) {
+                window.vm.Header.cloudHookLogs.push(Args.log)
+                if (window.vm.Header.cloudHookLogs.length > 200) {
+                    window.vm.Header.cloudHookLogs = window.vm.Header.cloudHookLogs.slice(-100)
+                }
             }
             return
         default:

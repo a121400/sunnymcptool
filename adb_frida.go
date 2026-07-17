@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,97 @@ import (
 )
 
 const FridaServerPath = "/data/local/tmp/frida-server"
+
+func getAdbDir() string {
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		appData = os.TempDir()
+	}
+	return filepath.Join(appData, "SunnyNet", "adb")
+}
+
+func getAdbExe() string {
+	return filepath.Join(getAdbDir(), "platform-tools", "adb.exe")
+}
+
+func findAdb() string {
+	builtinAdb := getAdbExe()
+	if _, err := os.Stat(builtinAdb); err == nil {
+		return builtinAdb
+	}
+	if path, err := exec.LookPath("adb"); err == nil {
+		return path
+	}
+	return ""
+}
+
+func ensureADB() (string, error) {
+	if adbPath := findAdb(); adbPath != "" {
+		cloudHook.addLog("ADB 已找到: " + adbPath)
+		return adbPath, nil
+	}
+
+	cloudHook.addLog("ADB 未找到，开始下载 Android Platform Tools...")
+	CallJsAlert("环境安装", "正在下载 ADB 工具，请稍候...")
+
+	dir := getAdbDir()
+	os.MkdirAll(dir, 0755)
+
+	url := "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+	zipPath := filepath.Join(dir, "platform-tools.zip")
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("下载 ADB 失败: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("下载 ADB 返回 HTTP %d", resp.StatusCode)
+	}
+
+	f, err := os.Create(zipPath)
+	if err != nil {
+		return "", err
+	}
+	_, err = io.Copy(f, resp.Body)
+	f.Close()
+	if err != nil {
+		os.Remove(zipPath)
+		return "", fmt.Errorf("下载 ADB 写入失败: %v", err)
+	}
+	cloudHook.addLog("ADB 下载完成，正在解压...")
+
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		os.Remove(zipPath)
+		return "", fmt.Errorf("打开 ADB zip: %v", err)
+	}
+	for _, zf := range r.File {
+		target := filepath.Join(dir, filepath.FromSlash(zf.Name))
+		if zf.FileInfo().IsDir() {
+			os.MkdirAll(target, 0755)
+			continue
+		}
+		os.MkdirAll(filepath.Dir(target), 0755)
+		rc, _ := zf.Open()
+		out, _ := os.Create(target)
+		io.Copy(out, rc)
+		out.Close()
+		rc.Close()
+	}
+	r.Close()
+	os.Remove(zipPath)
+
+	adbExePath := getAdbExe()
+	if _, err := os.Stat(adbExePath); err != nil {
+		return "", fmt.Errorf("解压后找不到 adb.exe")
+	}
+	cloudHook.addLog("ADB 安装完成: " + adbExePath)
+	return adbExePath, nil
+}
+
+var adbPath string
 
 func hiddenCmd(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
@@ -41,7 +133,14 @@ func GetFridaVersion() string {
 }
 
 func adbExec(args ...string) (string, error) {
-	cmd := hiddenCmd("adb", args...)
+	exe := adbPath
+	if exe == "" {
+		exe = findAdb()
+	}
+	if exe == "" {
+		return "", fmt.Errorf("ADB 未安装")
+	}
+	cmd := hiddenCmd(exe, args...)
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
@@ -125,17 +224,18 @@ func InstallFridaServer() error {
 	xzPath := filepath.Join(tmpDir, fileName)
 	binPath := filepath.Join(tmpDir, fmt.Sprintf("frida-server-%s-android-%s", fridaVersion, arch))
 
-	fmt.Printf("[Frida] 下载 %s\n", url)
+	cloudHook.addLog(fmt.Sprintf("下载 frida-server v%s (%s)...", fridaVersion, arch))
+	CallJsAlert("安装 frida-server", fmt.Sprintf("正在下载 frida-server v%s，请稍候...", fridaVersion))
 	if err := downloadFile(url, xzPath); err != nil {
 		return fmt.Errorf("下载 frida-server 失败: %v", err)
 	}
+	cloudHook.addLog("frida-server 下载完成，解压中...")
 
-	fmt.Println("[Frida] 解压 xz...")
 	if err := decompressXZ(xzPath, binPath); err != nil {
 		return fmt.Errorf("解压失败: %v", err)
 	}
 
-	fmt.Println("[Frida] 推送到设备...")
+	cloudHook.addLog("推送 frida-server 到设备...")
 	if _, err := adbExec("push", binPath, FridaServerPath); err != nil {
 		return fmt.Errorf("推送失败: %v", err)
 	}
@@ -143,7 +243,7 @@ func InstallFridaServer() error {
 
 	os.Remove(xzPath)
 	os.Remove(binPath)
-	fmt.Println("[Frida] 安装完成")
+	cloudHook.addLog("frida-server 安装完成")
 	return nil
 }
 
@@ -242,25 +342,32 @@ func GetDeviceFridaVersion() string {
 
 func EnsureFridaServer() error {
 	cliVersion := GetFridaVersion()
+	cloudHook.addLog("frida CLI 版本: " + cliVersion)
 
 	if IsFridaServerInstalled() {
 		deviceVersion := GetDeviceFridaVersion()
+		cloudHook.addLog("设备 frida-server 版本: " + deviceVersion)
 		if deviceVersion != cliVersion {
-			fmt.Printf("[Frida] 版本不匹配: CLI=%s, Server=%s, 重新安装...\n", cliVersion, deviceVersion)
+			cloudHook.addLog(fmt.Sprintf("版本不匹配 (CLI=%s, Server=%s)，重新安装...", cliVersion, deviceVersion))
 			adbShellSu("killall frida-server")
 			time.Sleep(500 * time.Millisecond)
 			if err := InstallFridaServer(); err != nil {
 				return err
 			}
+		} else {
+			cloudHook.addLog("frida-server 版本匹配")
 		}
 	} else {
+		cloudHook.addLog("设备未安装 frida-server，开始安装...")
 		if err := InstallFridaServer(); err != nil {
 			return err
 		}
 	}
 
 	if IsFridaServerRunning() {
+		cloudHook.addLog("frida-server 已在运行")
 		return nil
 	}
+	cloudHook.addLog("启动 frida-server...")
 	return StartFridaServer()
 }

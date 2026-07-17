@@ -57,12 +57,74 @@ type CloudHookMessage struct {
 
 
 func (s *CloudHookState) addLog(msg string) {
+	logLine := fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), msg)
 	s.mu.Lock()
-	s.logs = append(s.logs, fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), msg))
+	s.logs = append(s.logs, logLine)
 	if len(s.logs) > 200 {
 		s.logs = s.logs[len(s.logs)-100:]
 	}
 	s.mu.Unlock()
+	fmt.Println("[CloudHook]", msg)
+	CallJs("安卓云函数Hook日志", map[string]interface{}{"log": logLine})
+}
+
+func CheckCloudHookEnv() map[string]interface{} {
+	results := []map[string]interface{}{}
+
+	cloudHook.addLog("=== 环境检查开始 ===")
+
+	nodeExe, err := ensureNodeJS()
+	if err != nil {
+		cloudHook.addLog("✗ Node.js: " + err.Error())
+		results = append(results, map[string]interface{}{"name": "Node.js", "ok": false, "msg": err.Error()})
+	} else {
+		cmd := hiddenCmd(nodeExe, "--version")
+		ver, _ := cmd.Output()
+		verStr := strings.TrimSpace(string(ver))
+		cloudHook.addLog("✓ Node.js: " + verStr + " (" + nodeExe + ")")
+		results = append(results, map[string]interface{}{"name": "Node.js", "ok": true, "msg": verStr})
+	}
+
+	adbExePath, err := ensureADB()
+	if err != nil {
+		cloudHook.addLog("✗ ADB: " + err.Error())
+		results = append(results, map[string]interface{}{"name": "ADB", "ok": false, "msg": err.Error()})
+	} else {
+		adbPath = adbExePath
+		cmd := hiddenCmd(adbExePath, "version")
+		ver, _ := cmd.Output()
+		verLine := strings.Split(strings.TrimSpace(string(ver)), "\n")
+		verStr := "OK"
+		if len(verLine) > 0 {
+			verStr = strings.TrimSpace(verLine[0])
+		}
+		cloudHook.addLog("✓ ADB: " + verStr)
+		results = append(results, map[string]interface{}{"name": "ADB", "ok": true, "msg": verStr})
+	}
+
+	_, err = ensureFridaScripts(nodeExe)
+	if err != nil {
+		cloudHook.addLog("✗ Frida 依赖: " + err.Error())
+		results = append(results, map[string]interface{}{"name": "Frida 依赖", "ok": false, "msg": err.Error()})
+	} else {
+		fridaVer := GetFridaVersion()
+		cloudHook.addLog("✓ Frida 依赖: v" + fridaVer)
+		results = append(results, map[string]interface{}{"name": "Frida 依赖", "ok": true, "msg": "v" + fridaVer})
+	}
+
+	allOk := true
+	for _, r := range results {
+		if !r["ok"].(bool) {
+			allOk = false
+			break
+		}
+	}
+	cloudHook.addLog(fmt.Sprintf("=== 环境检查完成: %v ===", allOk))
+
+	return map[string]interface{}{
+		"success": allOk,
+		"results": results,
+	}
 }
 
 func StartCloudHook() map[string]interface{} {
@@ -229,7 +291,14 @@ func unzipNodeToDir(zipPath, destDir string) error {
 }
 
 
+const embeddedModulesVersion = "2"
+
 func isFridaModuleValid(dir string) bool {
+	markerPath := filepath.Join(dir, "node_modules", ".sunny_embedded_v")
+	data, err := os.ReadFile(markerPath)
+	if err != nil || strings.TrimSpace(string(data)) != embeddedModulesVersion {
+		return false
+	}
 	fridaModule := filepath.Join(dir, "node_modules", "frida")
 	bridgeModule := filepath.Join(dir, "node_modules", "frida-java-bridge")
 	if _, err := os.Stat(fridaModule); os.IsNotExist(err) {
@@ -254,6 +323,7 @@ func extractEmbeddedNodeModules(dir string) error {
 		return fmt.Errorf("读取内置 zip: %v", err)
 	}
 
+	fileCount := 0
 	for _, f := range r.File {
 		name := strings.ReplaceAll(f.Name, "\\", "/")
 		target := filepath.Join(dir, filepath.FromSlash(name))
@@ -281,13 +351,19 @@ func extractEmbeddedNodeModules(dir string) error {
 		if err != nil {
 			return fmt.Errorf("写入 %s: %v", target, err)
 		}
+		fileCount++
 	}
+
+	markerPath := filepath.Join(dir, "node_modules", ".sunny_embedded_v")
+	os.WriteFile(markerPath, []byte(embeddedModulesVersion), 0644)
+	cloudHook.addLog(fmt.Sprintf("解压完成: %d 个文件", fileCount))
 	return nil
 }
 
 func ensureFridaScripts(nodeExe string) (string, error) {
 	dir := getFridaScriptsDir()
 	os.MkdirAll(dir, 0755)
+	cloudHook.addLog("脚本目录: " + dir)
 
 	files := []string{"frida-scripts/frida_inject.mjs", "frida-scripts/cloudHookAndroid.js", "frida-scripts/global-shim.js"}
 	for _, f := range files {
@@ -299,16 +375,20 @@ func ensureFridaScripts(nodeExe string) (string, error) {
 		if err := os.WriteFile(dst, data, 0644); err != nil {
 			return "", fmt.Errorf("写入 %s: %v", dst, err)
 		}
+		cloudHook.addLog("  释放: " + filepath.Base(f))
 	}
 
 	pkgJson := `{"name":"sunny-frida","private":true,"type":"module"}`
 	os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkgJson), 0644)
 
 	if isFridaModuleValid(dir) {
+		cloudHook.addLog("Frida node_modules 已存在且有效")
 		return filepath.Join(dir, "frida_inject.mjs"), nil
 	}
 
+	cloudHook.addLog("Frida node_modules 需要重新解压 (版本标记不匹配)...")
 	os.RemoveAll(filepath.Join(dir, "node_modules"))
+	os.Remove(filepath.Join(dir, "package-lock.json"))
 
 	if err := extractEmbeddedNodeModules(dir); err != nil {
 		return "", fmt.Errorf("解压 frida 依赖失败: %v", err)
@@ -318,7 +398,7 @@ func ensureFridaScripts(nodeExe string) (string, error) {
 		return "", fmt.Errorf("解压后 frida 依赖校验失败")
 	}
 
-	cloudHook.addLog("frida 依赖就绪")
+	cloudHook.addLog("Frida 依赖就绪")
 	return filepath.Join(dir, "frida_inject.mjs"), nil
 }
 
@@ -331,49 +411,64 @@ func runCloudHook() {
 		CallJs("安卓云函数Hook状态", map[string]interface{}{"running": false})
 	}()
 
-	cloudHook.addLog("检测 ADB 设备...")
+	cloudHook.addLog("=== 启动安卓云函数 Hook ===")
+
+	cloudHook.addLog("[1/5] 检查 Node.js...")
+	nodeExe, err := ensureNodeJS()
+	if err != nil {
+		cloudHook.addLog("✗ Node.js 错误: " + err.Error())
+		CallJsAlert("安卓Hook失败", "Node.js: "+err.Error())
+		return
+	}
+	cloudHook.addLog("✓ Node.js: " + nodeExe)
+
+	cloudHook.addLog("[2/5] 检查 ADB...")
+	adbExePath, err := ensureADB()
+	if err != nil {
+		cloudHook.addLog("✗ ADB 错误: " + err.Error())
+		CallJsAlert("安卓Hook失败", "ADB: "+err.Error())
+		return
+	}
+	adbPath = adbExePath
+	cloudHook.addLog("✓ ADB: " + adbExePath)
+
+	cloudHook.addLog("[3/5] 检测设备...")
 	device, err := CheckADBDevice()
 	if err != nil {
-		cloudHook.addLog("错误: " + err.Error())
-		CallJsAlert("安卓Hook失败", "ADB: "+err.Error())
+		cloudHook.addLog("✗ 设备错误: " + err.Error())
+		CallJsAlert("安卓Hook失败", err.Error())
 		return
 	}
 	cloudHook.mu.Lock()
 	cloudHook.device = device
 	cloudHook.mu.Unlock()
-	cloudHook.addLog("设备: " + device)
+	cloudHook.addLog("✓ 设备: " + device)
 
-	cloudHook.addLog("确保 frida-server...")
-	if err := EnsureFridaServer(); err != nil {
-		cloudHook.addLog("错误: " + err.Error())
-		CallJsAlert("安卓Hook失败", "frida-server: "+err.Error())
-		return
-	}
-	cloudHook.addLog("frida-server OK")
-
-	nodeExe, err := ensureNodeJS()
-	if err != nil {
-		cloudHook.addLog("Node.js 错误: " + err.Error())
-		CallJsAlert("安卓Hook失败", "Node.js: "+err.Error())
-		return
-	}
-
-	cloudHook.addLog("释放脚本...")
+	cloudHook.addLog("[4/5] 释放 Frida 脚本...")
 	injectScript, err := ensureFridaScripts(nodeExe)
 	if err != nil {
-		cloudHook.addLog("错误: " + err.Error())
+		cloudHook.addLog("✗ 脚本释放错误: " + err.Error())
 		CallJsAlert("安卓Hook失败", "脚本释放: "+err.Error())
 		return
 	}
-	cloudHook.addLog("脚本就绪")
+	cloudHook.addLog("✓ 脚本就绪: " + injectScript)
 
-	cloudHook.addLog("启动 node 注入...")
+	cloudHook.addLog("[5/5] 确保 frida-server...")
+	if err := EnsureFridaServer(); err != nil {
+		cloudHook.addLog("✗ frida-server 错误: " + err.Error())
+		CallJsAlert("安卓Hook失败", "frida-server: "+err.Error())
+		return
+	}
+	cloudHook.addLog("✓ frida-server OK")
+
+	cloudHook.addLog("=== 环境检查全部通过，启动注入 ===")
+	cloudHook.addLog("执行: " + nodeExe + " " + injectScript)
 	cmd := exec.Command(nodeExe, injectScript)
 	cmd.Dir = filepath.Dir(injectScript)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		cloudHook.addLog("管道失败: " + err.Error())
+		cloudHook.addLog("✗ 管道创建失败: " + err.Error())
 		CallJsAlert("安卓Hook失败", "管道: "+err.Error())
 		return
 	}
@@ -384,10 +479,11 @@ func runCloudHook() {
 	cloudHook.mu.Unlock()
 
 	if err := cmd.Start(); err != nil {
-		cloudHook.addLog("node 启动失败: " + err.Error())
+		cloudHook.addLog("✗ node 进程启动失败: " + err.Error())
 		CallJsAlert("安卓Hook失败", "node: "+err.Error())
 		return
 	}
+	cloudHook.addLog(fmt.Sprintf("node 进程已启动 (PID: %d)", cmd.Process.Pid))
 
 	if stderrPipe != nil {
 		go func() {
@@ -401,15 +497,24 @@ func runCloudHook() {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
+	lineCount := 0
 	for scanner.Scan() {
 		if cloudHook.stopping {
 			break
 		}
+		lineCount++
 		processCloudHookLine(scanner.Text())
 	}
+	if err := scanner.Err(); err != nil {
+		cloudHook.addLog("stdout 读取错误: " + err.Error())
+	}
 
-	cmd.Wait()
-	cloudHook.addLog("Hook 已停止")
+	exitErr := cmd.Wait()
+	if exitErr != nil {
+		cloudHook.addLog(fmt.Sprintf("node 进程退出: %v (共收到 %d 行输出)", exitErr, lineCount))
+	} else {
+		cloudHook.addLog(fmt.Sprintf("node 进程正常退出 (共收到 %d 行输出)", lineCount))
+	}
 }
 
 func processCloudHookLine(line string) {

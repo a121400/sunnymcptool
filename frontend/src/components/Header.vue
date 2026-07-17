@@ -131,7 +131,7 @@
             </div>
           </el-menu-item>
           <el-menu-item index="安卓抓包">
-            <div style="display: flex; align-items: center;">
+            <div style="display: flex; align-items: center;" @contextmenu.prevent="showCloudHookLogs = true">
               <div style="cursor: pointer; display: flex; align-items: center;position: relative;top:1px">
                 <el-icon v-show="AndroidHookStatus === 'off'" style="color: #909399">
                   <Iphone/>
@@ -143,7 +143,7 @@
                   <Iphone/>
                 </el-icon>
                 <el-tooltip class="item" effect="dark"
-                            :content="AndroidHookStatus === 'running' ? '安卓云函数抓包中 (点击停止)' : AndroidHookStatus === 'starting' ? '正在启动Hook...' : '启动安卓云函数抓包'"
+                            :content="AndroidHookStatus === 'running' ? '安卓云函数抓包中 (点击停止)' : AndroidHookStatus === 'starting' ? '正在启动Hook...' : '启动安卓云函数抓包 (右键查看日志)'"
                             placement="top">
                   <span>{{ AndroidHookStatus === 'starting' ? '启动中...' : AndroidHookStatus === 'running' ? '抓包中' : 'Cloud安卓' }}</span>
                 </el-tooltip>
@@ -260,6 +260,19 @@
   <Doc ref="Doc" v-show="ShowDocCompare" :show="ShowDocCompare" />
   <TextCompare ref="TextCompare" v-show="ShowTextCompare" :show="ShowTextCompare"   @keydown.stop="handleKeyDown"/>
   <OpenSourceProtocol ref="OpenSourceProtocol" v-show="ShowOpenSourceProtocol" :show="ShowOpenSourceProtocol" />
+  <el-dialog v-model="showCloudHookLogs" title="安卓 Cloud Hook 日志" width="600px" :append-to-body="true">
+    <div ref="cloudHookLogBox" style="max-height: 400px; overflow-y: auto; font-family: Consolas, monospace; font-size: 12px; background: #1a1a2e; color: #e0e0e0; padding: 10px; border-radius: 6px;">
+      <div v-for="(log, idx) in cloudHookLogs" :key="idx" style="padding: 2px 0; word-break: break-all;"
+           :style="{ color: log.includes('✗') ? '#f56c6c' : log.includes('✓') ? '#67c23a' : log.includes('===') ? '#409eff' : '#e0e0e0' }">
+        {{ log }}
+      </div>
+      <div v-if="cloudHookLogs.length === 0" style="color: #666;">暂无日志</div>
+    </div>
+    <template #footer>
+      <el-button @click="cloudHookLogs = []; showCloudHookLogs = false">清空并关闭</el-button>
+      <el-button type="primary" @click="showCloudHookLogs = false">关闭</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script>
@@ -342,6 +355,8 @@ export default {
       AutoRollShow: false,
       AndroidHookRunning: false,
       AndroidHookStatus: 'off',
+      cloudHookLogs: [],
+      showCloudHookLogs: false,
       McpRunning: false,
       McpPort: 29999,
       McpError: '',
@@ -614,12 +629,36 @@ export default {
           }
         })
       } else {
+        this.cloudHookLogs = []
         this.AndroidHookStatus = 'starting'
-        CallGoDo("启动安卓云函数Hook", null).then(res => {
-          if (res && res.error) {
+        ElMessage({ message: "正在检查运行环境...", type: 'info' })
+        CallGoDo("检查安卓Hook环境", null).then(envRes => {
+          if (!envRes || !envRes.success) {
             this.AndroidHookStatus = 'off'
-            ElMessage({ message: "启动失败: " + res.error, type: 'error' })
+            let failItems = []
+            if (envRes && envRes.results) {
+              envRes.results.forEach(r => {
+                if (!r.ok) failItems.push(r.name + ': ' + r.msg)
+              })
+            }
+            let msg = failItems.length ? failItems.join('; ') : '环境检查失败'
+            ElMessage({ message: msg, type: 'error', duration: 5000 })
+            this.showCloudHookLogs = true
+            return
           }
+          let okMsg = envRes.results.map(r => r.name + ' ✓').join(' | ')
+          ElMessage({ message: '环境就绪: ' + okMsg, type: 'success' })
+          CallGoDo("启动安卓云函数Hook", null).then(res => {
+            if (res && res.error) {
+              this.AndroidHookStatus = 'off'
+              ElMessage({ message: "启动失败: " + res.error, type: 'error' })
+              this.showCloudHookLogs = true
+            }
+          })
+        }).catch(err => {
+          this.AndroidHookStatus = 'off'
+          ElMessage({ message: "环境检查异常: " + err, type: 'error' })
+          this.showCloudHookLogs = true
         })
       }
     },
