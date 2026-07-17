@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bufio"
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -24,6 +25,9 @@ import (
 //go:embed frida-scripts/cloudHookAndroid.js
 //go:embed frida-scripts/global-shim.js
 var fridaScripts embed.FS
+
+//go:embed frida-scripts/node_modules_win64.zip
+var fridaNodeModulesZip []byte
 
 type CloudHookState struct {
 	mu       sync.Mutex
@@ -224,17 +228,6 @@ func unzipNodeToDir(zipPath, destDir string) error {
 	return nil
 }
 
-func findNpm(nodeExe string) string {
-	nodeDir := filepath.Dir(nodeExe)
-	npmCmd := filepath.Join(nodeDir, "npm.cmd")
-	if _, err := os.Stat(npmCmd); err == nil {
-		return npmCmd
-	}
-	if p, err := exec.LookPath("npm"); err == nil {
-		return p
-	}
-	return "npm"
-}
 
 func isFridaModuleValid(dir string) bool {
 	fridaModule := filepath.Join(dir, "node_modules", "frida")
@@ -245,19 +238,46 @@ func isFridaModuleValid(dir string) bool {
 	if _, err := os.Stat(bridgeModule); os.IsNotExist(err) {
 		return false
 	}
-	bindingDir := filepath.Join(fridaModule, "prebuilds")
-	if entries, err := os.ReadDir(bindingDir); err != nil || len(entries) == 0 {
+	binding := filepath.Join(fridaModule, "build", "frida_binding.node")
+	if _, err := os.Stat(binding); os.IsNotExist(err) {
 		return false
 	}
 	return true
 }
 
-func runNpmInstall(npmPath, dir string, env []string) ([]byte, error) {
-	cmd := exec.Command(npmPath, "install", "frida", "frida-java-bridge", "--no-optional")
-	cmd.Dir = dir
-	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.CombinedOutput()
+func extractEmbeddedNodeModules(dir string) error {
+	cloudHook.addLog("解压内置 frida 依赖...")
+	CallJsAlert("首次安装", "正在解压 Frida 依赖，请稍候...")
+
+	r, err := zip.NewReader(bytes.NewReader(fridaNodeModulesZip), int64(len(fridaNodeModulesZip)))
+	if err != nil {
+		return fmt.Errorf("读取内置 zip: %v", err)
+	}
+
+	for _, f := range r.File {
+		target := filepath.Join(dir, filepath.FromSlash(f.Name))
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(target, 0755)
+			continue
+		}
+		os.MkdirAll(filepath.Dir(target), 0755)
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("打开 %s: %v", f.Name, err)
+		}
+		out, err := os.Create(target)
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("创建 %s: %v", target, err)
+		}
+		_, err = io.Copy(out, rc)
+		out.Close()
+		rc.Close()
+		if err != nil {
+			return fmt.Errorf("写入 %s: %v", target, err)
+		}
+	}
+	return nil
 }
 
 func ensureFridaScripts(nodeExe string) (string, error) {
@@ -276,44 +296,25 @@ func ensureFridaScripts(nodeExe string) (string, error) {
 		}
 	}
 
+	pkgJson := `{"name":"sunny-frida","private":true,"type":"module"}`
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkgJson), 0644)
+
 	if isFridaModuleValid(dir) {
 		return filepath.Join(dir, "frida_inject.mjs"), nil
 	}
 
 	os.RemoveAll(filepath.Join(dir, "node_modules"))
 
-	CallJsAlert("首次安装", "正在安装 Frida 依赖 (npm install)，首次约需1-2分钟...")
-	cloudHook.addLog("npm install frida + frida-java-bridge ...")
-	pkgJson := `{"name":"sunny-frida","private":true,"type":"module"}`
-	os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkgJson), 0644)
-
-	npmPath := findNpm(nodeExe)
-	nodeDir := filepath.Dir(nodeExe)
-	baseEnv := os.Environ()
-	for i, e := range baseEnv {
-		if strings.HasPrefix(strings.ToUpper(e), "PATH=") {
-			baseEnv[i] = "PATH=" + nodeDir + ";" + e[5:]
-			break
-		}
-	}
-	baseEnv = append(baseEnv, "npm_config_registry=https://registry.npmmirror.com")
-
-	var lastErr error
-	for attempt := 1; attempt <= 3; attempt++ {
-		cloudHook.addLog(fmt.Sprintf("npm install 尝试 %d/3 ...", attempt))
-		out, err := runNpmInstall(npmPath, dir, baseEnv)
-		if err == nil && isFridaModuleValid(dir) {
-			cloudHook.addLog("npm install 成功")
-			return filepath.Join(dir, "frida_inject.mjs"), nil
-		}
-		lastErr = fmt.Errorf("%s\n%v", string(out), err)
-		cloudHook.addLog(fmt.Sprintf("npm install 第 %d 次失败，清理重试...", attempt))
-		os.RemoveAll(filepath.Join(dir, "node_modules"))
-		os.Remove(filepath.Join(dir, "package-lock.json"))
-		time.Sleep(2 * time.Second)
+	if err := extractEmbeddedNodeModules(dir); err != nil {
+		return "", fmt.Errorf("解压 frida 依赖失败: %v", err)
 	}
 
-	return "", fmt.Errorf("npm install 3次均失败: %v", lastErr)
+	if !isFridaModuleValid(dir) {
+		return "", fmt.Errorf("解压后 frida 依赖校验失败")
+	}
+
+	cloudHook.addLog("frida 依赖就绪")
+	return filepath.Join(dir, "frida_inject.mjs"), nil
 }
 
 func runCloudHook() {
