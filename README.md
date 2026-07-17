@@ -137,14 +137,22 @@ capture_ 工具族需要 tshark 可执行文件。将编译好的 Wireshark 放�
 1. 手机连接 USB，打开 USB 调试
 2. 手机需要 ROOT 权限（Magisk / KernelSU）
 3. 在 SunnyNet GUI 点击顶部 **"Cloud安卓"** 按钮
-4. 首次使用会自动下载 Node.js 和 Frida 依赖（约1-2分钟）
-5. Hook 成功后弹窗提示，开始自动捕获云函数调用
+4. 程序自动检查环境（Node.js / ADB / Frida），缺失的组件会自动下载安装
+5. 环境就绪后自动启动 Hook，成功后弹窗提示，开始捕获云函数调用
 
 ### 自动处理
 
+点击 Cloud安卓 按钮后，程序会依次自动检查并安装所有必需环境：
+
 - **Node.js**：未安装则自动下载便携版到 `%APPDATA%/SunnyNet/node/`
+- **ADB**：未安装则自动下载 Android Platform Tools 到 `%APPDATA%/SunnyNet/adb/`
+- **Frida 依赖**：内置 `frida` + `frida-java-bridge`（已打包在二进制中，无需 npm install）
 - **frida-server**：自动检测手机版本，不匹配则下载安装对应版本
-- **npm 依赖**：首次自动安装 `frida` + `frida-java-bridge`
+
+### 日志查看
+
+- 右键点击 **Cloud安卓** 按钮可打开日志窗口，查看所有步骤的详细日志
+- 启动失败或 Hook 异常退出时会自动弹出日志窗口
 
 ### 列表显示
 
