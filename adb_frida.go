@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
+	_ "embed"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +19,22 @@ import (
 )
 
 const FridaServerPath = "/data/local/tmp/frida-server"
+const embeddedFridaServerVersion = "17.15.5"
+
+//go:embed frida-scripts/frida-server-arm64.xz
+var fridaServerArm64XZ []byte
+
+//go:embed frida-scripts/frida-server-arm.xz
+var fridaServerArmXZ []byte
+
+var embeddedFridaServers = map[string][]byte{
+	"arm64": fridaServerArm64XZ,
+	"arm":   fridaServerArmXZ,
+}
+
+func getEmbeddedFSDir() string {
+	return filepath.Join(os.TempDir(), "sunny-frida-server")
+}
 
 func getAdbDir() string {
 	appData := os.Getenv("APPDATA")
@@ -215,24 +233,43 @@ func IsFridaServerInstalled() bool {
 }
 
 func InstallFridaServer() error {
-	fridaVersion := GetFridaVersion()
 	arch := GetDeviceArch()
-	fileName := fmt.Sprintf("frida-server-%s-android-%s.xz", fridaVersion, arch)
-	url := fmt.Sprintf("https://github.com/frida/frida/releases/download/%s/%s", fridaVersion, fileName)
+	tmpDir := getEmbeddedFSDir()
+	os.MkdirAll(tmpDir, 0755)
+	binPath := filepath.Join(tmpDir, "frida-server")
 
-	tmpDir := os.TempDir()
-	xzPath := filepath.Join(tmpDir, fileName)
-	binPath := filepath.Join(tmpDir, fmt.Sprintf("frida-server-%s-android-%s", fridaVersion, arch))
+	if data, ok := embeddedFridaServers[arch]; ok && len(data) > 0 {
+		cloudHook.addLog(fmt.Sprintf("使用内置 frida-server v%s (%s)...", embeddedFridaServerVersion, arch))
+		r, err := xz.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return fmt.Errorf("解压内置 frida-server: %v", err)
+		}
+		out, err := os.Create(binPath)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(out, r)
+		out.Close()
+		if err != nil {
+			return fmt.Errorf("写入 frida-server: %v", err)
+		}
+	} else {
+		fridaVersion := GetFridaVersion()
+		fileName := fmt.Sprintf("frida-server-%s-android-%s.xz", fridaVersion, arch)
+		url := fmt.Sprintf("https://github.com/frida/frida/releases/download/%s/%s", fridaVersion, fileName)
+		xzPath := filepath.Join(tmpDir, fileName)
 
-	cloudHook.addLog(fmt.Sprintf("下载 frida-server v%s (%s)...", fridaVersion, arch))
-	CallJsAlert("安装 frida-server", fmt.Sprintf("正在下载 frida-server v%s，请稍候...", fridaVersion))
-	if err := downloadFile(url, xzPath); err != nil {
-		return fmt.Errorf("下载 frida-server 失败: %v", err)
-	}
-	cloudHook.addLog("frida-server 下载完成，解压中...")
-
-	if err := decompressXZ(xzPath, binPath); err != nil {
-		return fmt.Errorf("解压失败: %v", err)
+		cloudHook.addLog(fmt.Sprintf("下载 frida-server v%s (%s)...", fridaVersion, arch))
+		CallJsAlert("安装 frida-server", fmt.Sprintf("正在下载 frida-server v%s，请稍候...", fridaVersion))
+		if err := downloadFile(url, xzPath); err != nil {
+			return fmt.Errorf("下载 frida-server 失败: %v", err)
+		}
+		cloudHook.addLog("frida-server 下载完成，解压中...")
+		if err := decompressXZ(xzPath, binPath); err != nil {
+			os.Remove(xzPath)
+			return fmt.Errorf("解压失败: %v", err)
+		}
+		os.Remove(xzPath)
 	}
 
 	cloudHook.addLog("推送 frida-server 到设备...")
@@ -241,7 +278,6 @@ func InstallFridaServer() error {
 	}
 	adbShellSu(fmt.Sprintf("chmod 755 %s", FridaServerPath))
 
-	os.Remove(xzPath)
 	os.Remove(binPath)
 	cloudHook.addLog("frida-server 安装完成")
 	return nil
@@ -375,30 +411,25 @@ func fridaMajorMinor(ver string) string {
 }
 
 func EnsureFridaServer() error {
-	cliVersion := GetFridaVersion()
-	cloudHook.addLog("frida CLI 版本: " + cliVersion)
+	cloudHook.addLog("内置 frida-server 版本: " + embeddedFridaServerVersion)
 
 	if IsFridaServerInstalled() {
 		deviceVersion := GetDeviceFridaVersion()
 		cloudHook.addLog("设备 frida-server 版本: " + deviceVersion)
-		cliMM := fridaMajorMinor(cliVersion)
+		embMM := fridaMajorMinor(embeddedFridaServerVersion)
 		devMM := fridaMajorMinor(deviceVersion)
-		if cliMM != devMM {
-			cloudHook.addLog(fmt.Sprintf("主版本不匹配 (%s vs %s)，重新安装...", cliVersion, deviceVersion))
+		if embMM != devMM {
+			cloudHook.addLog(fmt.Sprintf("主版本不匹配 (%s vs 内置%s)，使用内置版本替换...", deviceVersion, embeddedFridaServerVersion))
 			adbShellSu("killall frida-server")
 			time.Sleep(500 * time.Millisecond)
 			if err := InstallFridaServer(); err != nil {
 				return err
 			}
 		} else {
-			if deviceVersion != cliVersion {
-				cloudHook.addLog(fmt.Sprintf("补丁版本差异 (%s vs %s)，兼容可用", cliVersion, deviceVersion))
-			} else {
-				cloudHook.addLog("frida-server 版本匹配")
-			}
+			cloudHook.addLog("frida-server 版本兼容")
 		}
 	} else {
-		cloudHook.addLog("设备未安装 frida-server，开始安装...")
+		cloudHook.addLog("设备未安装 frida-server，推送内置版本...")
 		if err := InstallFridaServer(); err != nil {
 			return err
 		}
