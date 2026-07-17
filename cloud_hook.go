@@ -255,20 +255,25 @@ func extractEmbeddedNodeModules(dir string) error {
 	}
 
 	for _, f := range r.File {
-		target := filepath.Join(dir, filepath.FromSlash(f.Name))
+		name := strings.ReplaceAll(f.Name, "\\", "/")
+		target := filepath.Join(dir, filepath.FromSlash(name))
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(target, 0755)
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return fmt.Errorf("创建目录 %s: %v", target, err)
+			}
 			continue
 		}
-		os.MkdirAll(filepath.Dir(target), 0755)
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return fmt.Errorf("创建父目录 %s: %v", filepath.Dir(target), err)
+		}
 		rc, err := f.Open()
 		if err != nil {
-			return fmt.Errorf("打开 %s: %v", f.Name, err)
+			return fmt.Errorf("打开 %s: %v", name, err)
 		}
 		out, err := os.Create(target)
 		if err != nil {
 			rc.Close()
-			return fmt.Errorf("创建 %s: %v", target, err)
+			return fmt.Errorf("创建文件 %s: %v", target, err)
 		}
 		_, err = io.Copy(out, rc)
 		out.Close()
