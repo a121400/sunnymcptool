@@ -5,9 +5,13 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"github.com/qtgolang/SunnyNet/SunnyNet"
 	"github.com/qtgolang/SunnyNet/public"
 	"github.com/qtgolang/SunnyNet/src/GoWinHttp"
+	shttp "github.com/qtgolang/SunnyNet/src/http"
+	tls_client "github.com/qtgolang/SunnyNet/src/tlsClient/tlsClient"
+	"github.com/qtgolang/SunnyNet/src/tlsClient/tlsClient/profiles"
 	"io"
 	"net"
 	"net/http"
@@ -18,6 +22,9 @@ import (
 	"sync"
 	"time"
 )
+
+var UseTlsFingerprint bool
+var TlsProfileName string = "chrome_120"
 
 type Map struct {
 	Request      map[int]*Request
@@ -392,23 +399,67 @@ func (m *Map) Resend(TheologyArray []int, mode int, Port int) {
 
 func resend(m *Request, mode, Port int) {
 	if m != nil {
-		/*
-			if m.Way == "Websocket" {
-				resendWS(m, mode, Port)
-			}
-		*/
 		if m.Way == "HTTP" {
-			resendHttp(m, mode, Port)
-		}
-		/*
-			else if m.Way == "UDP" {
-				resendUDP(m, Port)
-			} else if strings.Contains(strings.ToUpper(m.Way), "TCP") {
-				resendTCP(m, strings.Contains(strings.ToUpper(m.Way), "TLS"), Port)
+			if UseTlsFingerprint {
+				resendHttpTLS(m)
+			} else {
+				resendHttp(m, mode, Port)
 			}
-		*/
+		}
 	}
+}
 
+func resendHttpTLS(m *Request) {
+	if m == nil {
+		return
+	}
+	profile, ok := profiles.MappedTLSClients[TlsProfileName]
+	if !ok {
+		profile = profiles.Chrome_120
+	}
+	client, err := tls_client.NewHttpClient(
+		tls_client.NewNoopLogger(),
+		tls_client.WithClientProfile(profile),
+		tls_client.WithInsecureSkipVerify(),
+		tls_client.WithTimeoutSeconds(15),
+		tls_client.WithNotFollowRedirects(),
+		tls_client.WithRandomTLSExtensionOrder(),
+	)
+	if err != nil {
+		fmt.Println("[TLS-Resend] create client err:", err)
+		return
+	}
+	bodyReader := bytes.NewReader(m.Body)
+	req, err := shttp.NewRequest(m.Method, m.URL, bodyReader)
+	if err != nil {
+		fmt.Println("[TLS-Resend] create request err:", err)
+		return
+	}
+	if m.Header != nil {
+		for k, vs := range m.Header {
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
+		}
+	}
+	req.Header.Del("Accept-Encoding")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("[TLS-Resend] do request err:", err)
+		return
+	}
+	if resp != nil && resp.Body != nil {
+		respBody, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		m.Response.StateCode = resp.StatusCode
+		m.Response.Body = respBody
+		m.Response.Header = make(map[string][]string)
+		for k, vs := range resp.Header {
+			m.Response.Header[k] = vs
+		}
+		fmt.Printf("[TLS-Resend] %s %s → %d (%d bytes)\n", m.Method, m.URL, resp.StatusCode, len(respBody))
+	}
 }
 
 // 写完但是貌似有问题

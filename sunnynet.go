@@ -271,9 +271,9 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 						_TmpLock.Unlock()
 					}
 				}
-				Body := Conn.GetRequestBody()
-				Body = ReplaceBody(Body)
-				Conn.SetRequestBody(Body)
+			Body := Conn.GetRequestBody()
+			Body = ReplaceBody(Body)
+			Conn.SetRequestBody(Body)
 			}
 
 		} else if Conn.Type() == public.HttpResponseOK {
@@ -336,11 +336,11 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 				}
 				delete(Conn.GetResponseHeader(), "Transfer-Encoding")
 			}
-			Body := Conn.GetResponseBody()
-			Body = ReplaceBody(Body)
-			Conn.SetResponseBody(Body)
-		}
-		if !(GetWorkingState()) && Conn.Type() == public.HttpSendRequest {
+		Body := Conn.GetResponseBody()
+		Body = ReplaceBody(Body)
+		Conn.SetResponseBody(Body)
+	}
+	if !(GetWorkingState()) && Conn.Type() == public.HttpSendRequest {
 			//执行发起请求脚本
 			RunHTTPRequestScriptCode(Conn)
 			return

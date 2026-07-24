@@ -430,9 +430,12 @@ export default {
           name: '重发',
           subMenu: [
             {
-              name: '普通重发',
+              name: 'TLS指纹重发 (' + (window._tlsProfile || 'chrome_120') + ')',
               action: () => {
-                this.resend(3)
+                CallGoDo("切换TLS指纹", {Enabled: "true", Profile: window._tlsProfile || "chrome_120"}).then(() => {
+                  this.resend(3)
+                  setTimeout(() => { CallGoDo("切换TLS指纹", {Enabled: "false", Profile: ""}) }, 500)
+                })
               },
               disabled: false,
               visible: true

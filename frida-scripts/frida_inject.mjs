@@ -23,6 +23,7 @@ async function main() {
   }
 
   log(`找到 ${wechatProcs.length} 个微信进程`);
+  wechatProcs.forEach(p => log(`  进程: ${p.name} (PID:${p.pid})`));
 
   const compiler = new frida.Compiler();
   const bundle = await compiler.build(scriptPath, { projectRoot: __dirname });
@@ -49,7 +50,7 @@ async function main() {
       hookedCount++;
       log(`Hook: ${proc.name} (PID:${proc.pid})`);
     } catch (e) {
-      log(`失败: ${proc.name}(${proc.pid}): ${e.message}`);
+      log(`失败 ${proc.name}(${proc.pid}): ${e.message}`);
     }
   }
 

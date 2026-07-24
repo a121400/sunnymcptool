@@ -413,17 +413,26 @@ func applyTLSProtoCheck(cfg *tls.Config) { //设置TLS协议版本校验
 	}
 }
 
-func newTransport(cfg *tls.Config, timeout time.Duration) *http.Transport { //创建Transport并设置超时
+var UseTlsFingerprint bool
+var TlsHelloID = tls.HelloChrome_120
+
+func newTransport(cfg *tls.Config, timeout time.Duration) *http.Transport {
 	Tr := &http.Transport{TLSClientConfig: cfg}
 	if timeout == 0 {
-		Tr.ResponseHeaderTimeout = 60 * time.Second // 读取响应头超时
-		Tr.IdleConnTimeout = 60 * time.Second       // 空闲连接超时
-		Tr.TLSHandshakeTimeout = 60 * time.Second   // TLS 握手超时
+		Tr.ResponseHeaderTimeout = 60 * time.Second
+		Tr.IdleConnTimeout = 60 * time.Second
+		Tr.TLSHandshakeTimeout = 60 * time.Second
 	} else {
-		Tr.ResponseHeaderTimeout = timeout // 读取响应头超时
-		Tr.IdleConnTimeout = timeout       // 空闲连接超时
-		Tr.TLSHandshakeTimeout = timeout   // TLS 握手超时
+		Tr.ResponseHeaderTimeout = timeout
+		Tr.IdleConnTimeout = timeout
+		Tr.TLSHandshakeTimeout = timeout
 	}
+
+	if UseTlsFingerprint {
+		hid := TlsHelloID
+		Tr.TLSUClientHelloID = &hid
+	}
+
 	return Tr
 }
 

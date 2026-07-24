@@ -130,6 +130,23 @@
               </div>
             </div>
           </el-menu-item>
+          <el-menu-item index="TLS指纹">
+            <div style="display: flex; align-items: center;">
+              <div style="cursor: pointer; display: flex; align-items: center;position: relative;top:1px">
+                <el-icon v-show="!TlsEnabled" style="color: #909399">
+                  <Lock/>
+                </el-icon>
+                <el-icon v-show="TlsEnabled" style="color: #67C23A">
+                  <Lock/>
+                </el-icon>
+                <el-tooltip class="item" effect="dark"
+                            :content="TlsEnabled ? 'TLS指纹已开启: '+TlsProfile+' (点击关闭)' : '开启TLS指纹伪装 (点击开启)'"
+                            placement="top">
+                  <span>TLS{{ TlsEnabled ? '✓' : '' }}</span>
+                </el-tooltip>
+              </div>
+            </div>
+          </el-menu-item>
           <el-menu-item index="安卓抓包">
             <div style="display: flex; align-items: center;" @contextmenu.prevent="showCloudHookLogs = true">
               <div style="cursor: pointer; display: flex; align-items: center;position: relative;top:1px">
@@ -286,7 +303,7 @@ import '../../wailsjs/runtime/runtime.js';
 import {EventsOn, WindowMinimise, WindowToggleMaximise} from "../../wailsjs/runtime/runtime.js";
 import {Do} from "../../wailsjs/go/main/App.js";
 import {CallGoDo, EventsDo, StrBase64Encode} from "./CallbackEventsOn.js";
-import {CircleCloseFilled, SuccessFilled, WarningFilled, Loading, Iphone} from '@element-plus/icons-vue'
+import {CircleCloseFilled, SuccessFilled, WarningFilled, Loading, Iphone, Lock} from '@element-plus/icons-vue'
 import {ElMessage} from "element-plus";
 import Doc from "./CertDoc/Doc.vue";
 import OpenSourceProtocol from "./OpenSourceProtocol/OpenSourceProtocol.vue";
@@ -357,6 +374,8 @@ export default {
       AndroidHookStatus: 'off',
       cloudHookLogs: [],
       showCloudHookLogs: false,
+      TlsEnabled: false,
+      TlsProfile: 'chrome_120',
       McpRunning: false,
       McpPort: 29999,
       McpError: '',
@@ -466,6 +485,11 @@ export default {
         return
       }
 
+      //TLS指纹切换
+      if (key === "TLS指纹") {
+        this.toggleTls()
+        return
+      }
       //MCP服务 (纯状态显示，无需操作)
       if (key === "MCP服务") {
         return
@@ -662,6 +686,25 @@ export default {
         })
       }
     },
+    toggleTls() {
+      const newState = !this.TlsEnabled
+      CallGoDo("切换TLS指纹", {Enabled: newState ? "true" : "false", Profile: this.TlsProfile}).then(res => {
+        if (res) {
+          this.TlsEnabled = res.enabled
+          this.TlsProfile = res.profile || 'chrome_120'
+          window._tlsProfile = this.TlsProfile
+        }
+      })
+    },
+    getTlsStatus() {
+      CallGoDo("获取TLS状态", null).then(res => {
+        if (res) {
+          this.TlsEnabled = res.enabled
+          this.TlsProfile = res.profile || 'chrome_120'
+          window._tlsProfile = this.TlsProfile
+        }
+      }).catch(() => {})
+    },
     getMcpStatus() {
       CallGoDo("获取MCP状态", null).then(res => {
         if (res) {
@@ -729,6 +772,7 @@ export default {
     }
     window.vm.Header = this
     this.getMcpStatus()
+    this.getTlsStatus()
     setTimeout(() => { this.getMcpStatus() }, 2000)
 
     this.$nextTick(() => {

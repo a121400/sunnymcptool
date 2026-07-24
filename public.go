@@ -22,6 +22,8 @@ import (
 	"github.com/qtgolang/SunnyNet/Api"
 	"github.com/qtgolang/SunnyNet/SunnyNet"
 	"github.com/qtgolang/SunnyNet/public"
+	stls "github.com/qtgolang/SunnyNet/src/crypto/tls"
+	"github.com/qtgolang/SunnyNet/src/httpClient"
 	"github.com/qtgolang/SunnyNet/src/protobuf/JSON"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -249,6 +251,32 @@ func event(command string, args *JSON.SyJson) any {
 		HashMap.Resend(TheologyArray, mode, app.App.Port())
 		CallJs("弹出成功信息", "重发请求已提交")
 		return true
+	case "切换TLS指纹":
+		enabled := args.GetData("Enabled") == "true"
+		profile := args.GetData("Profile")
+		MapHash.UseTlsFingerprint = enabled
+		httpClient.UseTlsFingerprint = enabled
+		if profile != "" {
+			MapHash.TlsProfileName = profile
+			switch profile {
+			case "chrome_120":
+				httpClient.TlsHelloID = stls.HelloChrome_120
+			case "chrome_124":
+				httpClient.TlsHelloID = stls.HelloChrome_Auto
+			case "firefox_120":
+				httpClient.TlsHelloID = stls.HelloFirefox_120
+			default:
+				httpClient.TlsHelloID = stls.HelloChrome_120
+			}
+		}
+		if enabled {
+			CallJs("弹出成功信息", "TLS指纹已开启: "+MapHash.TlsProfileName)
+		} else {
+			CallJs("弹出成功信息", "TLS指纹已关闭")
+		}
+		return map[string]any{"enabled": MapHash.UseTlsFingerprint, "profile": MapHash.TlsProfileName}
+	case "获取TLS状态":
+		return map[string]any{"enabled": MapHash.UseTlsFingerprint, "profile": MapHash.TlsProfileName}
 	case "工作状态":
 		SetWorkingState(args.GetData("State") == "true")
 		return true

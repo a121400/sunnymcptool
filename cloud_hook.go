@@ -1,3 +1,20 @@
+// cloud_hook.go - 安卓云函数 Hook (Frida 注入)
+//
+// 为什么 SunnyNet 代理抓不到 MMTLS:
+//   MMTLS 是微信自研加密协议(Mars框架)，非标准 TLS。
+//   连接直接 TCP 到微信服务器(220.196.x.x:443)，绕过 HTTP 代理。
+//   即使用 WinDivert 捕获 TCP，数据也是 MMTLS 加密的，无法 MitM 解密。
+//
+// 安卓方案: Frida 注入微信进程，Hook JNI 层 nativeInvokeHandler，
+//   在 MMTLS 加密前拦截明文云函数请求/响应(wx-cloud://verifyPlugin/call 等)。
+//
+// PC/Windows 方案(未实现):
+//   - wxaruntime/transfer API 主动调用已知 CGI (推荐，已在 wxhook 实现)
+//     正确 CGI: /cgi-bin/mmbiz-bin/wxaapp/verifyplugin (非 js-verifyplugin)
+//   - CE 内存扫描读取缓存的 host_sign/noncestr/timestamp
+//   - Frida Windows 注入 WeChatAppEx.exe (需逆向 mmtls.cc)
+//
+// 参考: https://github.com/citizenlab/wechat-security-report
 package main
 
 import (
@@ -653,3 +670,4 @@ func extractCloudFuncName(param2 string) string {
 	}
 	return "call"
 }
+

@@ -167,6 +167,9 @@ type Transport struct {
 	// If both are set, DialTLSContext takes priority.
 	DialTLS func(network, addr string) (net.Conn, error)
 
+	// TLSUClientHelloID if set, use tls.UClient with this HelloID instead of tls.Client
+	TLSUClientHelloID *tls.ClientHelloID
+
 	// TLSClientConfig specifies the TLS configuration to use with
 	// tls.Client.
 	// If nil, the default configuration is used.
@@ -319,6 +322,7 @@ func (t *Transport) Clone() *Transport {
 		Dial:                   t.Dial,
 		DialTLS:                t.DialTLS,
 		DialTLSContext:         t.DialTLSContext,
+		TLSUClientHelloID:      t.TLSUClientHelloID,
 		TLSHandshakeTimeout:    t.TLSHandshakeTimeout,
 		DisableKeepAlives:      t.DisableKeepAlives,
 		DisableCompression:     t.DisableCompression,
@@ -1530,9 +1534,17 @@ func (pconn *persistConn) addTLS(ctx context.Context, name string, trace *httptr
 		cfg.NextProtos = nil
 	}
 	plainConn := pconn.conn
-	tlsConn := tls.Client(plainConn, cfg)
+	var tlsConn *tls.Conn
+	var uConn *tls.UConn
+	useUTLS := pconn.t.TLSUClientHelloID != nil
+	if useUTLS {
+		uConn = tls.UClient(plainConn, cfg, *pconn.t.TLSUClientHelloID, false, false)
+		tlsConn = uConn.Conn
+	} else {
+		tlsConn = tls.Client(plainConn, cfg)
+	}
 	errc := make(chan error, 2)
-	var timer *time.Timer // for canceling TLS handshake
+	var timer *time.Timer
 	if d := pconn.t.TLSHandshakeTimeout; d != 0 {
 		timer = time.AfterFunc(d, func() {
 			errc <- tlsHandshakeTimeoutError{}
@@ -1542,7 +1554,12 @@ func (pconn *persistConn) addTLS(ctx context.Context, name string, trace *httptr
 		if trace != nil && trace.TLSHandshakeStart != nil {
 			trace.TLSHandshakeStart()
 		}
-		err := tlsConn.Handshake()
+		var err error
+		if useUTLS {
+			err = uConn.Handshake()
+		} else {
+			err = tlsConn.Handshake()
+		}
 		if timer != nil {
 			timer.Stop()
 		}
