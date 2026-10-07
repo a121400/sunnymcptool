@@ -2,11 +2,11 @@ package main
 
 import (
 	"bytes"
-	"github.com/a121400/sunnymcptool/CommAnd"
-	"github.com/a121400/sunnymcptool/MapHash"
 	"compress/flate"
 	"compress/gzip"
 	"fmt"
+	"github.com/a121400/sunnymcptool/CommAnd"
+	"github.com/a121400/sunnymcptool/MapHash"
 	"io"
 	"net/http"
 	"net/url"
@@ -250,6 +250,7 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 			SunnyNetMode, _ = strconv.Atoi(Conn.GetRequestHeader().Get("SunnyNetMode"))
 			Conn.GetRequestHeader().Del("SunnyNetMode")
 			HostsRulesUrl(connURL)
+			rawURL := connURL.String()
 			u, b := ReplaceURL(connURL)
 			if len(b) > 0 {
 				respHeader := make(sunnyhttp.Header)
@@ -257,10 +258,13 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 				respHeader.Set("Accept-Ranges", "bytes")
 				respHeader.Set("Connection", "Close")
 				respHeader.Set("Content-Length", strconv.Itoa(len(b)))
+				if ct := ContentTypeByURL(connURL); ct != "" {
+					respHeader.Set("Content-Type", ct)
+				}
 				Conn.StopRequest(200, b, respHeader)
 			} else {
 				Conn.UpdateURL(u.String())
-				ReplaceHeader(http.Header(Conn.GetRequestHeader()))
+				ReplaceRequestHeader(http.Header(Conn.GetRequestHeader()), rawURL)
 				{
 					if Conn.GetRequestHeader() != nil {
 						_TmpLock.Lock()
@@ -271,9 +275,11 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 						_TmpLock.Unlock()
 					}
 				}
-			Body := Conn.GetRequestBody()
-			Body = ReplaceBody(Body)
-			Conn.SetRequestBody(Body)
+				Body := Conn.GetRequestBody()
+				oldLen := len(Body)
+				Body = ReplaceHTTPBody(Body, rawURL, false)
+				Conn.SetRequestBody(Body)
+				UpdateContentLength(http.Header(Conn.GetRequestHeader()), oldLen, len(Body))
 			}
 
 		} else if Conn.Type() == public.HttpResponseOK {
@@ -288,7 +294,7 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 					_TmpLock.Unlock()
 				}
 			}
-			ReplaceHeader(http.Header(Conn.GetResponseHeader()))
+			ReplaceResponseHeader(http.Header(Conn.GetResponseHeader()), Conn.URL())
 			if Conn.GetResponseHeader() != nil {
 				Body := Conn.GetResponseBody()
 				if len(Body) > 0 {
@@ -336,11 +342,13 @@ func HttpCallback(Conn SunnyNet.ConnHTTP) {
 				}
 				delete(Conn.GetResponseHeader(), "Transfer-Encoding")
 			}
-		Body := Conn.GetResponseBody()
-		Body = ReplaceBody(Body)
-		Conn.SetResponseBody(Body)
-	}
-	if !(GetWorkingState()) && Conn.Type() == public.HttpSendRequest {
+			Body := Conn.GetResponseBody()
+			oldLen := len(Body)
+			Body = ReplaceHTTPBody(Body, Conn.URL(), true)
+			Conn.SetResponseBody(Body)
+			UpdateContentLength(http.Header(Conn.GetResponseHeader()), oldLen, len(Body))
+		}
+		if !(GetWorkingState()) && Conn.Type() == public.HttpSendRequest {
 			//执行发起请求脚本
 			RunHTTPRequestScriptCode(Conn)
 			return

@@ -18,23 +18,28 @@ func init() {
 
 	mcp.GlobalRegistry.Register(mcp.ToolDefinition{
 		Name:        "replace_rules_add",
-		Description: "添加新的替换规则，支持类型：Base64、HEX、String(UTF8)、String(GBK)、响应文件",
+		Description: "添加替换规则。类型：Base64、HEX、String(UTF8)、String(GBK) 为全局字节替换；仅URL 只改 URL；请求体/响应体 只改对应正文；请求头/响应头 的 source 填头名（整段赋值，target 为空则删除）或 头名||片段；正则请求/正则响应 的 source 为正则，target 支持 $1；响应文件 的 source 为 URL 中要出现的文本，target 为本地文件路径，每次请求重新读文件。url 可选，只对 URL 包含该文本的请求生效，以 re: 开头则按正则匹配 URL。",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"type": map[string]interface{}{
 					"type":        "string",
-					"description": "替换类型：Base64、HEX、String(UTF8)、String(GBK)、响应文件",
-					"enum":        []string{"Base64", "HEX", "String(UTF8)", "String(GBK)", "响应文件"},
+					"description": "替换类型",
+					"enum":        []string{"Base64", "HEX", "String(UTF8)", "String(GBK)", "响应文件", "请求头", "响应头", "请求体", "响应体", "正则请求", "正则响应", "仅URL"},
 					"default":     "String(UTF8)",
 				},
 				"source": map[string]interface{}{
 					"type":        "string",
-					"description": "源内容（要匹配的内容）",
+					"description": "源内容。请求头/响应头填头名或 头名||要替换的片段；正则为表达式；响应文件为 URL 中包含的文件名或路径片段",
 				},
 				"target": map[string]interface{}{
 					"type":        "string",
-					"description": "替换内容（替换为的内容，响应文件类型时为文件路径）",
+					"description": "替换内容。请求头/响应头为新的完整值，留空表示删除该头；响应文件为本地绝对路径",
+					"default":     "",
+				},
+				"url": map[string]interface{}{
+					"type":        "string",
+					"description": "可选。只对 URL 包含这段文字的请求生效。以 re: 开头则按正则匹配完整 URL。留空表示全部流量",
 					"default":     "",
 				},
 			},
@@ -87,6 +92,7 @@ func toolReplaceRulesListHandler(args map[string]interface{}) (interface{}, erro
 			"src":   r.Src,
 			"dest":  r.Dest,
 			"hash":  r.Hash,
+			"url":   r.Scope,
 		}
 	}
 	return map[string]interface{}{
@@ -101,26 +107,26 @@ func toolReplaceRulesAddHandler(args map[string]interface{}) (interface{}, error
 	source := v.RequireString("source")
 	ruleType := v.OptionalString("type", "String(UTF8)")
 	target := v.OptionalString("target", "")
+	scope := v.OptionalString("url", "")
 	if err := v.Error(); err != nil {
 		return nil, err
 	}
-
-	validTypes := map[string]bool{
-		"Base64": true, "HEX": true, "String(UTF8)": true, "String(GBK)": true, "响应文件": true,
-	}
-	if !validTypes[ruleType] {
-		return nil, fmt.Errorf("无效的替换类型: %s，支持: Base64, HEX, String(UTF8), String(GBK), 响应文件", ruleType)
-	}
-	if source == "" {
+	if source == "" && ruleType != "请求头" && ruleType != "响应头" {
 		return nil, errors.New("源内容不能为空")
 	}
 
 	hash := fmt.Sprintf("%d", time.Now().UnixNano())
 	rule := mcp.ConfigReplaceRule{
-		Type: ruleType,
-		Src:  source,
-		Dest: target,
-		Hash: hash,
+		Type:  ruleType,
+		Src:   source,
+		Dest:  target,
+		Hash:  hash,
+		Scope: scope,
+	}
+	if c := safeCtx(); c != nil && c.CheckReplace != nil {
+		if err := c.CheckReplace(rule); err != nil {
+			return nil, err
+		}
 	}
 
 	c := safeCtx()

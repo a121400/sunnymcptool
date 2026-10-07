@@ -2,11 +2,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"github.com/a121400/sunnymcptool/CommAnd"
 	"github.com/a121400/sunnymcptool/MapHash"
 	"github.com/a121400/sunnymcptool/Resource"
-	"encoding/json"
-	"fmt"
 	"go/format"
 	"net/http"
 	"os"
@@ -732,10 +732,11 @@ type Color struct {
 	Right string `json:"right"`
 }
 type ConfigReplaceRules struct {
-	Type string `json:"Type"`
-	Src  string `json:"Src"`
-	Dest string `json:"Dest"`
-	Hash string `json:"Hash"`
+	Type  string `json:"Type"`
+	Src   string `json:"Src"`
+	Dest  string `json:"Dest"`
+	Hash  string `json:"Hash"`
+	Scope string `json:"Scope,omitempty"`
 }
 type ConfigRequestCertManager struct {
 	Rule     uint8  `json:"rule"`

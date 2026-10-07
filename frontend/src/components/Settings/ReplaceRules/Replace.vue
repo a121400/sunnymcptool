@@ -195,6 +195,15 @@ export default {
               cellStyle: {'text-align': 'left'}
             },
             {
+              field: "生效范围", tooltipField: '生效范围',
+              headerTooltip: '留空表示全部流量。填写后只对 URL 包含这段文字的请求生效。以 re: 开头则按正则匹配完整 URL',
+              minWidth: 90,
+              menuTabs: [],
+              suppressMovable: true,
+              editable: true,
+              cellStyle: {'text-align': 'left'}
+            },
+            {
               field: "状态", tooltipField: '状态',
               minWidth: 100,
               maxWidth: 100,
@@ -219,10 +228,11 @@ export default {
   methods: {
     AddLine(type, a1, a2, a3) {
       let obj = {}
-      obj[this.columns[0].field] = type
-      obj[this.columns[1].field] = a1
-      obj[this.columns[2].field] = a2
-      obj[this.columns[3].field] = a3
+      obj["替换类型"] = type
+      obj["源内容"] = a1
+      obj["替换内容"] = a2
+      obj["生效范围"] = ""
+      obj["状态"] = a3
       obj.Hash = (new Date().getTime()) + "";
       this.RowData.push(obj)
       this.$nextTick(() => {
@@ -237,11 +247,12 @@ export default {
         const Src = objs[i]['Src']
         const Dest = objs[i]['Dest']
         let obj = {}
-        obj[this.columns[0].field] = Type
-        obj[this.columns[1].field] = Src
-        obj[this.columns[2].field] = Dest
-        obj[this.columns[3].field] = "已保存"
-        obj.Hash = (new Date().getTime()) + "";
+        obj["替换类型"] = Type
+        obj["源内容"] = Src
+        obj["替换内容"] = Dest
+        obj["生效范围"] = objs[i]['Scope'] || ""
+        obj["状态"] = "已保存"
+        obj.Hash = objs[i]['Hash'] || ((new Date().getTime()) + "" + i);
         array.push(obj)
       }
       this.RowData = array

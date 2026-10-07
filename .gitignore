@@ -19,6 +19,10 @@ frontend/dist/
 .vscode/
 *.iml
 .kiro/
+.cursor/
+
+# 本地试验目录
+frida-scripts/bundled/
 
 # 临时文件
 *.log

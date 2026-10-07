@@ -86,7 +86,7 @@ Cursor ──stdio──> sunnynet-mcp ──HTTP──> SunnyNet GUI (:29999/mc
 | **长连接** | `connection_list` | 列出 WS/TCP/UDP 连接 |
 | | `socket_data_list` / `socket_data_get` / `socket_data_get_range` | 数据包操作 |
 | **断点** | `breakpoint_add` / `breakpoint_list` / `breakpoint_remove` / `breakpoint_clear` | 断点管理 |
-| **规则** | `replace_rules_add` / `replace_rules_list` / `replace_rules_remove` / `replace_rules_clear` | 替换规则 |
+| **规则** | `replace_rules_add` / `replace_rules_list` / `replace_rules_remove` / `replace_rules_clear` | 替换规则。除全局 String/HEX/Base64、响应文件外，还可按请求头、响应头、请求体、响应体、正则、仅 URL 替换，并用 `url` 限制生效范围 |
 | | `hosts_list` / `hosts_add` / `hosts_remove` | HOSTS 规则 |
 | **进程** | `process_list` / `process_add_name` / `process_remove_name` | 进程过滤 |
 | **抓包(Wireshark)** | `capture_list_interfaces` | 列出网络接口（需 Npcap） |

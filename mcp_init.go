@@ -84,27 +84,29 @@ func (a *proxyAppAdapter) CancelIEProxy() bool {
 // appConfigAdapter 将 GlobalConfig 适配为 mcp.AppConfig 接口
 type appConfigAdapter struct{}
 
-func (c *appConfigAdapter) GetPort() int                          { return GlobalConfig.Port }
-func (c *appConfigAdapter) SetPort(port int)                      { GlobalConfig.Port = port }
-func (c *appConfigAdapter) GetDisableUDP() bool                   { return GlobalConfig.DisableUDP }
-func (c *appConfigAdapter) GetDisableTCP() bool                   { return GlobalConfig.DisableTCP }
-func (c *appConfigAdapter) GetDisableCache() bool                 { return GlobalConfig.DisableCache }
-func (c *appConfigAdapter) GetAuthentication() bool               { return GlobalConfig.Authentication }
-func (c *appConfigAdapter) GetGlobalProxy() string                { return GlobalConfig.GlobalProxy }
-func (c *appConfigAdapter) GetGlobalProxyRules() string           { return GlobalConfig.GlobalProxyRules }
-func (c *appConfigAdapter) GetMustTcpOpen() bool                  { return GlobalConfig.MustTcp.Open }
-func (c *appConfigAdapter) GetMustTcpRules() string               { return GlobalConfig.MustTcp.Rules }
-func (c *appConfigAdapter) GetCertDefault() bool                  { return GlobalConfig.Cert.Default }
-func (c *appConfigAdapter) GetCertCaPath() string                 { return GlobalConfig.Cert.CaPath }
-func (c *appConfigAdapter) GetCertKeyPath() string                { return GlobalConfig.Cert.KeyPath }
-func (c *appConfigAdapter) GetDarkTheme() uint8                   { return GlobalConfig.DarkTheme }
-func (c *appConfigAdapter) GetRequestCertManagerCount() int       { return len(GlobalConfig.RequestCertManager) }
-func (c *appConfigAdapter) Save() error                           { return GlobalConfig.saveToFile() }
+func (c *appConfigAdapter) GetPort() int                { return GlobalConfig.Port }
+func (c *appConfigAdapter) SetPort(port int)            { GlobalConfig.Port = port }
+func (c *appConfigAdapter) GetDisableUDP() bool         { return GlobalConfig.DisableUDP }
+func (c *appConfigAdapter) GetDisableTCP() bool         { return GlobalConfig.DisableTCP }
+func (c *appConfigAdapter) GetDisableCache() bool       { return GlobalConfig.DisableCache }
+func (c *appConfigAdapter) GetAuthentication() bool     { return GlobalConfig.Authentication }
+func (c *appConfigAdapter) GetGlobalProxy() string      { return GlobalConfig.GlobalProxy }
+func (c *appConfigAdapter) GetGlobalProxyRules() string { return GlobalConfig.GlobalProxyRules }
+func (c *appConfigAdapter) GetMustTcpOpen() bool        { return GlobalConfig.MustTcp.Open }
+func (c *appConfigAdapter) GetMustTcpRules() string     { return GlobalConfig.MustTcp.Rules }
+func (c *appConfigAdapter) GetCertDefault() bool        { return GlobalConfig.Cert.Default }
+func (c *appConfigAdapter) GetCertCaPath() string       { return GlobalConfig.Cert.CaPath }
+func (c *appConfigAdapter) GetCertKeyPath() string      { return GlobalConfig.Cert.KeyPath }
+func (c *appConfigAdapter) GetDarkTheme() uint8         { return GlobalConfig.DarkTheme }
+func (c *appConfigAdapter) GetRequestCertManagerCount() int {
+	return len(GlobalConfig.RequestCertManager)
+}
+func (c *appConfigAdapter) Save() error { return GlobalConfig.saveToFile() }
 
 func (c *appConfigAdapter) GetReplaceRules() []mcp.ConfigReplaceRule {
 	rules := make([]mcp.ConfigReplaceRule, len(GlobalConfig.ReplaceRules))
 	for i, r := range GlobalConfig.ReplaceRules {
-		rules[i] = mcp.ConfigReplaceRule{Type: r.Type, Src: r.Src, Dest: r.Dest, Hash: r.Hash}
+		rules[i] = mcp.ConfigReplaceRule{Type: r.Type, Src: r.Src, Dest: r.Dest, Hash: r.Hash, Scope: r.Scope}
 	}
 	return rules
 }
@@ -112,7 +114,7 @@ func (c *appConfigAdapter) GetReplaceRules() []mcp.ConfigReplaceRule {
 func (c *appConfigAdapter) SetReplaceRules(rules []mcp.ConfigReplaceRule) {
 	GlobalConfig.ReplaceRules = make([]ConfigReplaceRules, len(rules))
 	for i, r := range rules {
-		GlobalConfig.ReplaceRules[i] = ConfigReplaceRules{Type: r.Type, Src: r.Src, Dest: r.Dest, Hash: r.Hash}
+		GlobalConfig.ReplaceRules[i] = ConfigReplaceRules{Type: r.Type, Src: r.Src, Dest: r.Dest, Hash: r.Hash, Scope: r.Scope}
 	}
 	RebuildReplaceRulesFromConfig()
 }
@@ -261,6 +263,10 @@ func InitMCPContext() {
 		},
 		NotifyUI: func(event string, data interface{}) {
 			CallJs(event, data)
+		},
+		CheckReplace: func(rule mcp.ConfigReplaceRule) error {
+			_, err := compileReplaceRule(rule.Type, rule.Src, rule.Dest, rule.Scope)
+			return err
 		},
 	}
 }

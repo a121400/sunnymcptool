@@ -15,10 +15,11 @@ type HostsRule struct {
 
 // ConfigReplaceRule 配置替换规则
 type ConfigReplaceRule struct {
-	Type string `json:"Type"`
-	Src  string `json:"Src"`
-	Dest string `json:"Dest"`
-	Hash string `json:"Hash"`
+	Type  string `json:"Type"`
+	Src   string `json:"Src"`
+	Dest  string `json:"Dest"`
+	Hash  string `json:"Hash"`
+	Scope string `json:"Scope,omitempty"`
 }
 
 // ProxyApp 代理应用接口 - 抽象 SunnyNet 实例
@@ -76,17 +77,18 @@ type DataIO interface {
 
 // AppContext 应用上下文 - 工具通过此接口访问 main 包的全局变量
 type AppContext struct {
-	App          ProxyApp
-	Config       AppConfig
-	HashMap      *MapHash.Map
-	TmpLock      *sync.Mutex
-	HostsRuleMgr HostsRuleManager
-	DataIO       DataIO
+	App              ProxyApp
+	Config           AppConfig
+	HashMap          *MapHash.Map
+	TmpLock          *sync.Mutex
+	HostsRuleMgr     HostsRuleManager
+	DataIO           DataIO
 	SetCapturing     func(bool)
 	GetCapturing     func() bool
 	SearchFunc       func(keyword, searchType, color string) interface{}
 	CancelSearchFunc func() []int
 	NotifyUI         func(event string, data interface{})
+	CheckReplace     func(rule ConfigReplaceRule) error
 }
 
 // 全局应用上下文实例
