@@ -799,19 +799,19 @@ static BOOLEAN WinDivertStrLen(const wchar_t *s, size_t maxlen,
 static BOOLEAN WinDivertStrCpy(wchar_t *dst, size_t dstlen, const wchar_t *src)
 {
     size_t i;
-    for (i = 0; src[i]; i++)
+    for (i = 0; src[i] != L'\0'; i++)
     {
-        if (i > dstlen)
+        if (i >= dstlen)
         {
             return FALSE;
         }
         dst[i] = src[i];
     }
-    if (i > dstlen)
+    if (i >= dstlen)
     {
         return FALSE;
     }
-    dst[i] = src[i];
+    dst[i] = L'\0';
     return TRUE;
 }
 
