@@ -3,47 +3,176 @@
 
 package Proxifier
 
-/*
-#cgo CXXFLAGS: -std=c++11
-#cgo LDFLAGS: -lws2_32
-#include "Proxifier.hpp"
-#include <stdio.h>
-#include <stdlib.h>
-*/
-import "C"
 import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/qtgolang/SunnyNet/src/ProcessDrv/Info"
-	"github.com/qtgolang/SunnyNet/src/ProcessDrv/ProcessCheck"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unicode/utf16"
 	"unsafe"
+
+	"github.com/qtgolang/SunnyNet/src/ProcessDrv/Info"
+	"github.com/qtgolang/SunnyNet/src/ProcessDrv/ProcessCheck"
+	"golang.org/x/sys/windows"
+)
+
+const (
+	pipeBufferSize = 0x534
+	pipeName       = `\\.\pipe\proxifier`
+	mutexStd       = `Global\ProxifierStd300Mutex`
+	mutexRun       = `Global\Proxifier32Mutex1040`
 )
 
 var HandleClientConn func(net.Conn)
 var myPid = os.Getpid()
 
-func Write(hPipe C.HANDLE, bs []byte) {
-	l := len(bs)
-	if l < 1 {
-		return
+var (
+	mu              sync.Mutex
+	hMStop          atomic.Uintptr
+	hMutexProxifier windows.Handle
+	pipeSA          *windows.SecurityAttributes
+)
+
+func init() {
+	sd, err := windows.NewSecurityDescriptor()
+	if err == nil {
+		_ = sd.SetDACL(nil, true, false)
+		pipeSA = &windows.SecurityAttributes{
+			Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+			SecurityDescriptor: sd,
+		}
 	}
-	b := C.CString(string(bs))
-	C.ProxifierWriteFile(hPipe, b, C.DWORD(l))
-	C.free(unsafe.Pointer(b))
+	go proxifierLoop()
 }
 
-var mu sync.Mutex
+func proxifierLoop() {
+	for {
+		proxifierCreateMutex()
+		if windows.Handle(hMStop.Load()) == 0 {
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		waitPipe()
+	}
+}
 
-//export Call
-func Call(hPipe C.HANDLE, raw uintptr) {
-	__pid := int(binary.LittleEndian.Uint16(CStringToBytes(raw+0x4EC, 2)))
-	path := wcharPtrToString(raw + 8)
+func waitPipe() {
+	name, err := windows.UTF16PtrFromString(pipeName)
+	if err != nil {
+		time.Sleep(200 * time.Millisecond)
+		return
+	}
+	hPipe, err := windows.CreateNamedPipe(
+		name,
+		windows.PIPE_ACCESS_DUPLEX,
+		windows.PIPE_TYPE_MESSAGE|windows.PIPE_READMODE_MESSAGE,
+		1, 0, 0, 0,
+		pipeSA,
+	)
+	if err != nil || hPipe == 0 || hPipe == windows.InvalidHandle {
+		time.Sleep(200 * time.Millisecond)
+		return
+	}
+	err = windows.ConnectNamedPipe(hPipe, nil)
+	if err != nil && err != windows.ERROR_PIPE_CONNECTED {
+		_ = windows.CloseHandle(hPipe)
+		return
+	}
+	buffer := make([]byte, pipeBufferSize)
+	var n uint32
+	if err = windows.ReadFile(hPipe, buffer, &n, nil); err == nil && n >= 4 {
+		if binary.LittleEndian.Uint32(buffer[:4]) == n {
+			handlePipe(hPipe, buffer)
+		}
+	}
+	_ = windows.CloseHandle(hPipe)
+}
+
+func writePipe(hPipe windows.Handle, bs []byte) {
+	if len(bs) < 1 {
+		return
+	}
+	var written uint32
+	_ = windows.WriteFile(hPipe, bs, &written, nil)
+}
+
+func proxifierCreateMutex() {
+	name, err := windows.UTF16PtrFromString(mutexStd)
+	if err != nil {
+		return
+	}
+	h, err := windows.CreateMutex(nil, false, name)
+	if h == 0 {
+		return
+	}
+	if err == windows.ERROR_ALREADY_EXISTS {
+		_ = windows.ReleaseMutex(h)
+		_ = windows.CloseHandle(h)
+		return
+	}
+}
+
+func startProxifier() int {
+	proxifierCreateMutex()
+	if windows.Handle(hMStop.Load()) != 0 {
+		return 1
+	}
+	if hMutexProxifier != 0 {
+		hMStop.Store(uintptr(hMutexProxifier))
+		return 1
+	}
+	name, err := windows.UTF16PtrFromString(mutexRun)
+	if err != nil {
+		return 0
+	}
+	h, err := windows.CreateMutex(nil, false, name)
+	if h == 0 || err == windows.ERROR_ALREADY_EXISTS {
+		if h != 0 {
+			_ = windows.CloseHandle(h)
+		}
+		hMutexProxifier = 0
+		hMStop.Store(0)
+		return 0
+	}
+	hMutexProxifier = h
+	hMStop.Store(uintptr(h))
+	return 1
+}
+
+func stopProxifier() int {
+	if windows.Handle(hMStop.Load()) != 0 {
+		hMStop.Store(0)
+		return 1
+	}
+	return 0
+}
+
+func proxifierIsInit() bool {
+	proxifierCreateMutex()
+	name, err := windows.UTF16PtrFromString(mutexRun)
+	if err != nil {
+		return false
+	}
+	h, err := windows.OpenMutex(windows.MUTEX_ALL_ACCESS, false, name)
+	if err != nil || h == 0 {
+		return false
+	}
+	_ = windows.ReleaseMutex(h)
+	_ = windows.CloseHandle(h)
+	return true
+}
+
+func handlePipe(hPipe windows.Handle, raw []byte) {
+	if len(raw) < 0x4EC+2 {
+		return
+	}
+	__pid := int(binary.LittleEndian.Uint16(raw[0x4EC : 0x4EC+2]))
+	path := utf16At(raw, 8)
 
 	mu.Lock()
 	Handle := HandleClientConn
@@ -60,35 +189,36 @@ func Call(hPipe C.HANDLE, raw uintptr) {
 	if ProcessCheck.CheckPidByName(int32(__pid), fileName) {
 		return
 	}
-	family := int16(binary.LittleEndian.Uint16(CStringToBytes(raw+0x419, 2)))
+	if len(raw) < 0x419+8 {
+		return
+	}
+	family := int16(binary.LittleEndian.Uint16(raw[0x419 : 0x419+2]))
 	if family == 0 {
 		WriteData := make([]byte, 1020)
 		WriteData[0] = 0xfc
 		WriteData[1] = 0x3
 		WriteData[4] = 0x1
 		WriteData[0x3f8] = 0x1
-		Write(hPipe, WriteData)
-		//fmt.Println(hex.Dump(CStringToBytes(raw, 0x534)))
+		writePipe(hPipe, WriteData)
 		return
 	}
 	if family != 2 && family != 23 {
 		return
 	}
-	domain := wcharPtrToString(raw + 528)
-	port := int(binary.BigEndian.Uint16(CStringToBytes(raw+0x419+2, 2)))
+	domain := utf16At(raw, 528)
+	port := int(binary.BigEndian.Uint16(raw[0x419+2 : 0x419+4]))
 	if domain == "" {
-		bs := make([]byte, 0)
+		var bs []byte
 		if family == 23 {
-			bs = CStringToBytes(raw+0x419+8, 16)
+			if len(raw) < 0x419+8+16 {
+				return
+			}
+			bs = append([]byte(nil), raw[0x419+8:0x419+8+16]...)
 		} else {
-			bs = CStringToBytes(raw+0x419+4, 4)
+			bs = append([]byte(nil), raw[0x419+4:0x419+8]...)
 		}
 		ip := net.IP(bs)
-		if ip.To4() != nil {
-			domain = ip.String()
-		} else {
-			domain = ip.String()
-		}
+		domain = ip.String()
 	}
 	if port < 1 || port > 65535 {
 		return
@@ -99,7 +229,6 @@ func Call(hPipe C.HANDLE, raw uintptr) {
 	var listener net.Listener
 	var err error
 	WriteData := make([]byte, 1020)
-	//固定标志
 	WriteData[0] = 0xfc
 	WriteData[1] = 0x03
 	WriteData[9] = 0x00
@@ -117,10 +246,9 @@ func Call(hPipe C.HANDLE, raw uintptr) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		connChan := make(chan net.Conn)
+		connChan := make(chan net.Conn, 1)
 		go func() {
-			if er := recover(); er != nil {
-			}
+			defer func() { _ = recover() }()
 			conn, _ := listener.Accept()
 			_ = listener.Close()
 			connChan <- conn
@@ -134,12 +262,10 @@ func Call(hPipe C.HANDLE, raw uintptr) {
 					ip = net.ParseIP("[" + domain + "]")
 				}
 				_ISV6 := false
-				p4 := ip.To4()
-				p6 := ip.To16()
-				if p4 == nil && p6 != nil {
+				if ip != nil && ip.To4() == nil && ip.To16() != nil {
 					_ISV6 = true
 				}
-				var obj = &proxyProcessInfo{listener: listener, RemoteAddress: domain, RemotePort: uint16(port), V6: _ISV6, Pid: fmt.Sprintf("%d", __pid)}
+				obj := &proxyProcessInfo{listener: listener, RemoteAddress: domain, RemotePort: uint16(port), V6: _ISV6, Pid: fmt.Sprintf("%d", __pid)}
 				connLocalAddr := conn.RemoteAddr().(*net.TCPAddr)
 				connPort := uint16(connLocalAddr.Port)
 				ProcessCheck.AddDevObj(connPort, obj)
@@ -157,23 +283,18 @@ func Call(hPipe C.HANDLE, raw uintptr) {
 	}()
 	binary.BigEndian.PutUint16(WriteData[10:], uint16(listener.Addr().(*net.TCPAddr).Port))
 	if ISV6 {
-		//[::1]
 		WriteData[0x1f] = 0x01
-
 		WriteData[0x3f0] = 0x17
 	} else {
-		//127.0.0.1
 		WriteData[12] = 0x7f
 		WriteData[13] = 0x00
 		WriteData[14] = 0x00
 		WriteData[15] = 0x01
 		WriteData[0x3f0] = 0x02
 	}
-	//不知道什么玩意
 	WriteData[1012] = 0x06
 	WriteData[1016] = 0x02
-	Write(hPipe, WriteData)
-
+	writePipe(hPipe, WriteData)
 }
 
 type proxyProcessInfo struct {
@@ -188,18 +309,23 @@ type proxyProcessInfo struct {
 func (p *proxyProcessInfo) GetRemoteAddress() string {
 	return p.RemoteAddress
 }
+
 func (p *proxyProcessInfo) GetRemotePort() uint16 {
 	return p.RemotePort
 }
+
 func (p *proxyProcessInfo) GetPid() string {
 	return p.Pid
 }
+
 func (p *proxyProcessInfo) IsV6() bool {
 	return p.V6
 }
+
 func (p *proxyProcessInfo) ID() uint64 {
 	return p.Id
 }
+
 func (p *proxyProcessInfo) Close() error {
 	mu.Lock()
 	if p.listener != nil {
@@ -209,55 +335,35 @@ func (p *proxyProcessInfo) Close() error {
 	mu.Unlock()
 	return nil
 }
-func wcharPtrToString(ptr uintptr) string {
-	var length int
-	// 计算宽字符的长度
-	for {
-		wchar := *(*C.wchar_t)(unsafe.Pointer(ptr + uintptr(length)*unsafe.Sizeof(C.wchar_t(0))))
-		if wchar == 0 {
+
+func utf16At(buf []byte, off int) string {
+	if off < 0 || off >= len(buf) {
+		return ""
+	}
+	u := make([]uint16, 0, 32)
+	for i := off; i+1 < len(buf); i += 2 {
+		c := binary.LittleEndian.Uint16(buf[i:])
+		if c == 0 {
 			break
 		}
-		length++
+		u = append(u, c)
 	}
-
-	// 创建一个 Go 字符串切片
-	runes := make([]rune, length)
-
-	for i := 0; i < length; i++ {
-		runes[i] = rune(*(*C.wchar_t)(unsafe.Pointer(ptr + uintptr(i)*unsafe.Sizeof(C.wchar_t(0)))))
-	}
-
-	return string(runes)
+	return string(utf16.Decode(u))
 }
 
-func CStringToBytes(r uintptr, dataLen int) []byte {
-	data := make([]byte, 0)
-	if r == 0 || dataLen == 0 {
-		return data
-	}
-	for i := 0; i < dataLen; i++ {
-		data = append(data, *(*byte)(unsafe.Pointer(r + uintptr(i))))
-	}
-	return data
-}
 func IsInit() bool {
-	return int(C.ProxifierIsInit()) == 1 || HandleClientConn != nil
+	return proxifierIsInit() || HandleClientConn != nil
 }
+
 func SetHandle(Handle func(conn net.Conn)) bool {
-	res := 0
 	mu.Lock()
+	var res int
 	if Handle == nil {
-		res = int(C.StopProxifier())
+		res = stopProxifier()
 	} else {
-		res = int(C.StartProxifier())
+		res = startProxifier()
 	}
 	HandleClientConn = Handle
 	mu.Unlock()
 	return res == 1
-}
-
-func init() {
-	go func() {
-		C.ProxifierInit(C.int(myPid))
-	}()
 }
