@@ -32,6 +32,7 @@ type Command struct {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	startMMTLSPhoneSync()
 }
 
 func (a *App) Do(arg any) any {
