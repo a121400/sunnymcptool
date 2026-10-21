@@ -452,6 +452,7 @@ func RunHTTPRequestScriptCode(Conn SunnyNet.HttpConn) (_Display bool) {
 		h.Way = "HTTP"
 		h.PID = CommAnd.GetPidName(Conn.PID())
 		h.ClientIP = Conn.ClientIP()
+		applyMMTLSRequest(Conn.Theology(), h)
 		HashMap.SetRequest(Conn.Theology(), h)
 		return true
 	}
@@ -534,9 +535,52 @@ func RunHTTPRequestScriptCode(Conn SunnyNet.HttpConn) (_Display bool) {
 		h.Way = "HTTP"
 		h.PID = CommAnd.GetPidName(Conn.PID())
 		h.ClientIP = Conn.ClientIP()
+		applyMMTLSRequest(Conn.Theology(), h)
 		HashMap.SetRequest(Conn.Theology(), h)
 	}
 	return Display
+}
+
+func applyMMTLSRequest(id int, h *MapHash.Request) {
+	if h == nil {
+		return
+	}
+	plain, ok := MMTLSDecryptRequest(id, h.URL, h.Body)
+	if !ok {
+		return
+	}
+	h.Body = plain
+	if h.Notes == "" {
+		note := "mmtls已解密"
+		if len(plain) > 1 && plain[0] == '/' {
+			end := bytes.IndexByte(plain, '\r')
+			if end > 1 {
+				line := plain[:end]
+				if q := bytes.IndexByte(line, '?'); q > 0 {
+					line = line[:q]
+				}
+				if len(line) > 120 {
+					line = line[:120]
+				}
+				note += " " + string(line)
+			}
+		}
+		h.Notes = note
+	}
+}
+
+func applyMMTLSResponse(id int, url string, h *MapHash.Request) {
+	if h == nil {
+		return
+	}
+	plain, ok := MMTLSDecryptResponse(id, url, h.Response.Body)
+	if !ok {
+		return
+	}
+	h.Response.Body = plain
+	if h.Notes == "" {
+		h.Notes = "mmtls已解密"
+	}
 }
 func RunHTTPResponseScriptCode(Conn SunnyNet.HttpConn) (_Return_ bool) {
 	defer func() {
@@ -561,6 +605,14 @@ func RunHTTPResponseScriptCode(Conn SunnyNet.HttpConn) (_Return_ bool) {
 	_Call := httpFunc
 	lock.Unlock()
 	if _Call == nil {
+		h1 := HashMap.GetRequest(Conn.Theology())
+		if h1 != nil {
+			h1.Response.Body = Body2
+			h1.Response.Header = Header2
+			h1.Response.StateCode = StateCode
+			h1.Response.Conn = Conn
+			applyMMTLSResponse(Conn.Theology(), URL, h1)
+		}
 		return false
 	}
 
@@ -594,6 +646,7 @@ func RunHTTPResponseScriptCode(Conn SunnyNet.HttpConn) (_Return_ bool) {
 	h1.Response.Body = _Body
 	h1.Response.StateCode = _StateCode
 	h1.Response.Conn = Conn
+	applyMMTLSResponse(Conn.Theology(), URL, h1)
 	return _Break
 }
 func RunHTTPErrorScriptCode(Conn SunnyNet.HttpConn) {
