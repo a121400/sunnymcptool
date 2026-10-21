@@ -1,5 +1,6 @@
 # 构建产物
 build/bin/
+build/releases/
 *.exe
 *.dll
 *.so
@@ -55,3 +56,7 @@ ios-tool/main.go
 
 # Wireshark binaries (compiled from source, too large for git)
 wireshark/
+
+# 归档产物（旧构建、备份、python 缓存）
+artifacts/
+__pycache__/
